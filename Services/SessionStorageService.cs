@@ -1,0 +1,219 @@
+using System.Collections.Concurrent;
+using McpVersionVer2.Models.Dto;
+
+namespace McpVersionVer2.Services;
+
+public interface ISessionStorageService
+{
+    /// <summary>
+    /// Gets or creates a unique session ID for the given bearer token
+    /// </summary>
+    string GetOrCreateSessionId(string bearerToken);
+    
+    /// <summary>
+    /// Gets the session ID associated with a bearer token, if it exists
+    /// </summary>
+    string? GetSessionId(string bearerToken);
+    
+    /// <summary>
+    /// Clears the session mapping for a specific bearer token
+    /// </summary>
+    void ClearSession(string bearerToken);
+    
+    /// <summary>
+    /// Gets all active session IDs
+    /// </summary>
+    IEnumerable<string> GetAllSessionIds();
+    
+    /// <summary>
+    /// Stores JWT token pair for a session
+    /// </summary>
+    void StoreSessionTokens(string sessionId, CachedTokenPair tokens);
+    
+    /// <summary>
+    /// Gets stored JWT token pair for a session
+    /// </summary>
+    CachedTokenPair? GetSessionTokens(string sessionId);
+    
+    /// <summary>
+    /// Removes stored tokens for a session
+    /// </summary>
+    void RemoveSessionTokens(string sessionId);
+    
+    /// <summary>
+    /// Create an anonymous session id (not tied to a bearer token). Returns the new session id.
+    /// </summary>
+    string CreateAnonymousSession();
+}
+
+public class InMemorySessionStorageService : ISessionStorageService
+{
+    private readonly ConcurrentDictionary<string, string> _tokenToSessionMap = new();
+    
+    private readonly ConcurrentDictionary<string, DateTime> _sessionLastAccess = new();
+    
+    private readonly ConcurrentDictionary<string, CachedTokenPair> _sessionTokens = new();
+    
+    private readonly TimeSpan _sessionTimeout = TimeSpan.FromHours(24);
+    
+    // Reverse map for anonymous sessions (so we can list/remove them if needed)
+    private readonly ConcurrentDictionary<string, bool> _anonymousSessions = new();
+    
+    public string GetOrCreateSessionId(string bearerToken)
+    {
+        if (string.IsNullOrWhiteSpace(bearerToken))
+        {
+            return "anonymous";
+        }
+        
+        var tokenHash = GetTokenHash(bearerToken);
+        
+        CleanupExpiredSessions();
+        
+        var sessionId = _tokenToSessionMap.GetOrAdd(tokenHash, _ => GenerateSessionId());
+        
+        _sessionLastAccess[sessionId] = DateTime.UtcNow;
+        
+        return sessionId;
+    }
+    
+    public string CreateAnonymousSession()
+    {
+        var sessionId = GenerateSessionId();
+        _sessionLastAccess[sessionId] = DateTime.UtcNow;
+        _anonymousSessions[sessionId] = true;
+        return sessionId;
+    }
+    
+    public string? GetSessionId(string bearerToken)
+    {
+        if (string.IsNullOrWhiteSpace(bearerToken))
+        {
+            return null;
+        }
+        
+        var tokenHash = GetTokenHash(bearerToken);
+        
+        if (_tokenToSessionMap.TryGetValue(tokenHash, out var sessionId))
+        {
+            _sessionLastAccess[sessionId] = DateTime.UtcNow;
+            return sessionId;
+        }
+        
+        return null;
+    }
+    
+    public void ClearSession(string bearerToken)
+    {
+        if (string.IsNullOrWhiteSpace(bearerToken))
+        {
+            return;
+        }
+        
+        var tokenHash = GetTokenHash(bearerToken);
+        
+        if (_tokenToSessionMap.TryRemove(tokenHash, out var sessionId))
+        {
+            _sessionLastAccess.TryRemove(sessionId, out _);
+            _sessionTokens.TryRemove(sessionId, out _);
+        }
+    }
+    
+    public IEnumerable<string> GetAllSessionIds()
+    {
+        return _sessionLastAccess.Keys.ToList();
+    }
+    
+    public void StoreSessionTokens(string sessionId, CachedTokenPair tokens)
+    {
+        if (string.IsNullOrWhiteSpace(sessionId) || tokens == null)
+        {
+            return;
+        }
+        
+        _sessionTokens[sessionId] = tokens;
+        _sessionLastAccess[sessionId] = DateTime.UtcNow;
+    }
+    
+    public CachedTokenPair? GetSessionTokens(string sessionId)
+    {
+        if (string.IsNullOrWhiteSpace(sessionId))
+        {
+            return null;
+        }
+        
+        if (_sessionTokens.TryGetValue(sessionId, out var tokens))
+        {
+            _sessionLastAccess[sessionId] = DateTime.UtcNow;
+            return tokens;
+        }
+        
+        return null;
+    }
+    
+    public void RemoveSessionTokens(string sessionId)
+    {
+        if (string.IsNullOrWhiteSpace(sessionId))
+        {
+            return;
+        }
+        
+        _sessionTokens.TryRemove(sessionId, out _);
+    }
+    
+    /// <summary>
+    /// Generates a unique session ID in the format: ses_[22-char-base64]
+    /// </summary>
+    private static string GenerateSessionId()
+    {
+        var randomBytes = new byte[16];
+        using (var rng = System.Security.Cryptography.RandomNumberGenerator.Create())
+        {
+            rng.GetBytes(randomBytes);
+        }
+        
+        var base64 = Convert.ToBase64String(randomBytes)
+            .Replace('+', '-')
+            .Replace('/', '_')
+            .TrimEnd('=');
+        
+        return $"ses_{base64}";
+    }
+    
+    /// <summary>
+    /// Creates a SHA256 hash of the bearer token for storage
+    /// </summary>
+    private static string GetTokenHash(string token)
+    {
+        using var sha256 = System.Security.Cryptography.SHA256.Create();
+        var hashBytes = sha256.ComputeHash(System.Text.Encoding.UTF8.GetBytes(token));
+        return Convert.ToHexString(hashBytes).ToLower();
+    }
+    
+    /// <summary>
+    /// Cleans up sessions that haven't been accessed within the timeout period
+    /// </summary>
+    private void CleanupExpiredSessions()
+    {
+        var now = DateTime.UtcNow;
+        var expiredSessions = _sessionLastAccess
+            .Where(kvp => now - kvp.Value > _sessionTimeout)
+            .Select(kvp => kvp.Key)
+            .ToList();
+        
+        foreach (var sessionId in expiredSessions)
+        {
+            _sessionLastAccess.TryRemove(sessionId, out _);
+            _sessionTokens.TryRemove(sessionId, out _);
+            
+            var tokenHashToRemove = _tokenToSessionMap
+                .FirstOrDefault(kvp => kvp.Value == sessionId)
+                .Key;
+            
+            if (tokenHashToRemove != null)
+            {
+                _tokenToSessionMap.TryRemove(tokenHashToRemove, out _);
+            }
+        }
+    }
+}
