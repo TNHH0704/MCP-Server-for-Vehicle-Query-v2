@@ -8,7 +8,7 @@ namespace McpVersionVer2.Services;
 public class SecurityValidationService
 {
     private readonly AuditLogService _auditLog;
-    private readonly GitHubOpenAIService _openAIService;
+    private readonly IGitHubOpenAIService _openAIService;
     private readonly ILogger<SecurityValidationService> _logger;
 
     private static readonly HashSet<string> EducationalKeywords = new(StringComparer.OrdinalIgnoreCase)
@@ -53,7 +53,7 @@ public class SecurityValidationService
 
     private readonly Dictionary<string, HashSet<string>> _domainTopics;
 
-    public SecurityValidationService(AuditLogService auditLog, GitHubOpenAIService openAIService, ILogger<SecurityValidationService> logger)
+    public SecurityValidationService(AuditLogService auditLog, IGitHubOpenAIService openAIService, ILogger<SecurityValidationService> logger)
     {
         _auditLog = auditLog;
         _openAIService = openAIService;

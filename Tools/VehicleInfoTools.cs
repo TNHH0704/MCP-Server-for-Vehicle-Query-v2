@@ -28,8 +28,6 @@ public class VehicleInfoTools
         _securityService = securityService;
         _contextService = contextService;
         _requestContext = requestContext;
-        _contextService = contextService;
-        _requestContext = requestContext;
     }
 
     [McpServerTool, Description("VEHICLE REGISTRY: Get vehicle information from fleet registry. Supports: all vehicles, by plate, by ID, by group/company name. Returns plate, type, group, max speed, and other vehicle details. REJECT: non-vehicle queries.")]

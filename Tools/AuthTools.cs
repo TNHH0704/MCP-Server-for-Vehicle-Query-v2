@@ -90,69 +90,6 @@ public class AuthTools
         }
     }
 
-    [McpServerTool, Description("AUTH ONLY: Login with username and password to get JWT bearer token. Returns access and refresh tokens. REJECT: non-auth queries.")]
-    public async Task<string> Login(
-        [Description("Username or phone number for login")] string username,
-        [Description("Password for login")] string password)
-    {
-        _logger.LogInformation("Login tool called for username: {Username}", username);
-        var queryContext = "user login authentication";
-        var validation = await _securityService.ValidateQueryAsync(queryContext, "auth", "login_tool");
-        if (!validation.IsValid)
-        {
-            _logger.LogWarning("Login validation failed: {Reason}", validation.ToJsonResponse());
-            return validation.ToJsonResponse();
-        }
-
-        try
-        {
-            if (string.IsNullOrWhiteSpace(username) || string.IsNullOrWhiteSpace(password))
-            {
-                _logger.LogWarning("Login attempted with missing credentials for username: {Username}", username);
-                return System.Text.Json.JsonSerializer.Serialize(new
-                {
-                    success = false,
-                    error = "Username and password are required",
-                    errorCode = "MISSING_CREDENTIALS"
-                }, Default);
-            }
-
-            var result = await _authService.LoginAsync(username, password);
-
-            if (result == null)
-            {
-                _logger.LogWarning("Login failed for username: {Username} - AuthService returned null", username);
-                return System.Text.Json.JsonSerializer.Serialize(new
-                {
-                    success = false,
-                    error = "Login failed. Please check your credentials and try again.",
-                    errorCode = "LOGIN_FAILED"
-                }, Default);
-            }
-
-            // Log success with masked token
-            _logger.LogInformation("Login successful for username: {Username}; issuing tokens (masked access={AccessMasked}, refresh={RefreshMasked})",
-                username, MaskToken(result.AccessToken), MaskToken(result.RefreshToken));
-
-            // Return minimal payload with only accessToken and refreshToken as requested
-            return System.Text.Json.JsonSerializer.Serialize(new
-            {
-                accessToken = result.AccessToken,
-                refreshToken = result.RefreshToken
-            }, Default);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Login encountered an exception for username: {Username}", username);
-            return System.Text.Json.JsonSerializer.Serialize(new
-            {
-                success = false,
-                error = ex.Message,
-                errorCode = "INTERNAL_ERROR"
-            }, Default);
-        }
-    }
-
     private static string MaskToken(string? token)
     {
         if (string.IsNullOrEmpty(token)) return "(none)";

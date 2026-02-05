@@ -1,14 +1,21 @@
 using System.Text.Json;
 using Azure;
 using Azure.AI.OpenAI;
+using McpVersionVer2.Models;
 
 namespace McpVersionVer2.Services;
+
+public interface IGitHubOpenAIService
+{
+    Task<SecurityValidationResult?> ValidateIntentAsync(string query, string toolDomain, string? userId = null);
+    Task<string?> SummarizeConversationAsync(List<ConversationEntry> messages);
+}
 
 /// <summary>
 /// Service for integrating with GitHub models via Azure.AI.OpenAI SDK
 /// Uses GitHub Copilot Pro subscription for guardrail validation
 /// </summary>
-public class GitHubOpenAIService
+public class GitHubOpenAIService : IGitHubOpenAIService
 {
     private readonly OpenAIClient _openAIClient;
     private readonly IConfiguration _config;
@@ -332,5 +339,92 @@ public class GitHubOpenAIService
             "auth" => new[] { "token", "login", "auth", "credential", "access" },
             _ => Array.Empty<string>()
         };
+    }
+    
+    /// <summary>
+    /// Summarizes a conversation history into a concise summary
+    /// </summary>
+    public async Task<string?> SummarizeConversationAsync(List<ConversationEntry> messages)
+    {
+        if (messages == null || messages.Count == 0)
+        {
+            _logger.LogDebug("No messages to summarize");
+            return null;
+        }
+        
+        if (_openAIClient == null)
+        {
+            _logger.LogWarning("OpenAI client not configured - summarization disabled");
+            return null;
+        }
+        
+        try
+        {
+            var conversationText = BuildConversationText(messages);
+            var prompt = BuildSummarizationPrompt(conversationText);
+            
+            var chatOptions = new ChatCompletionsOptions
+            {
+                DeploymentName = _deploymentName,
+                Messages =
+                {
+                    new ChatRequestSystemMessage("You are a concise summarization assistant for a vehicle fleet management system. Preserve critical details: vehicle IDs, license plates, locations, timestamps, and any issues reported."),
+                    new ChatRequestUserMessage(prompt)
+                },
+                MaxTokens = 512,  // Fixed budget for summaries
+                Temperature = 0.3f  // Lower temperature for factual summaries
+            };
+            
+            Response<ChatCompletions> response = await _openAIClient.GetChatCompletionsAsync(chatOptions);
+            
+            if (response.Value.Choices.Count > 0)
+            {
+                var summary = response.Value.Choices[0].Message.Content;
+                _logger.LogInformation("Generated summary of {MessageCount} messages: {SummaryLength} characters",
+                    messages.Count, summary?.Length ?? 0);
+                return summary;
+            }
+            
+            _logger.LogWarning("No response from OpenAI API for summarization");
+            return null;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to summarize conversation with {MessageCount} messages", messages.Count);
+            return null;
+        }
+    }
+    
+    private string BuildConversationText(List<ConversationEntry> messages)
+    {
+        var lines = new List<string>();
+        
+        foreach (var msg in messages.OrderBy(m => m.Timestamp))
+        {
+            var role = msg.Role.ToUpper();
+            var timestamp = msg.Timestamp.ToString("yyyy-MM-dd HH:mm:ss");
+            var toolInfo = !string.IsNullOrEmpty(msg.ToolName) ? $" [{msg.ToolName}]" : "";
+            
+            lines.Add($"[{timestamp}] {role}{toolInfo}: {msg.Message}");
+        }
+        
+        return string.Join("\n", lines);
+    }
+    
+    private string BuildSummarizationPrompt(string conversationText)
+    {
+        return $@"Summarize the following vehicle fleet management conversation. 
+
+IMPORTANT RULES:
+1. Preserve all vehicle identifiers (IDs, license plates, names)
+2. Keep critical data: locations, timestamps, status changes, issues
+3. Use bullet points for clarity
+4. Focus on facts, not speculation
+5. Maximum 512 tokens
+
+CONVERSATION:
+{conversationText}
+
+SUMMARY (bullet points):";
     }
 }

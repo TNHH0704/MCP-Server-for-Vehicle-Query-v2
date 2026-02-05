@@ -2,6 +2,8 @@ using McpVersionVer2.Models;
 using McpVersionVer2.Services;
 using McpVersionVer2.Services.Mappers;
 using McpVersionVer2.Security;
+using McpVersionVer2.Data;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.AspNetCore.RateLimiting;
 using System.Threading.RateLimiting;
@@ -24,12 +26,21 @@ builder.Services.AddHttpClient();
 
 builder.Services.Configure<ConversationConfig>(builder.Configuration.GetSection("ConversationContext"));
 
+// Add DbContext for conversation persistence
+builder.Services.AddDbContext<ConversationDbContext>(options =>
+    options.UseSqlite("Data Source=./data/conversation.db"));
+
+// Add DbContext factory for services that need to create scoped contexts
+builder.Services.AddDbContextFactory<ConversationDbContext>(options =>
+    options.UseSqlite("Data Source=./data/conversation.db"));
+
 builder.Services.AddSingleton<IConversationContextService, InMemoryConversationContextService>();
 builder.Services.AddSingleton<ISessionStorageService, InMemorySessionStorageService>();
 builder.Services.AddScoped<RequestContextService>();
 builder.Services.AddSingleton<AuditLogService>();
-builder.Services.AddSingleton<GitHubOpenAIService>();
+builder.Services.AddSingleton<IGitHubOpenAIService, GitHubOpenAIService>();
 builder.Services.AddSingleton<SecurityValidationService>();
+builder.Services.AddScoped<IConversationSummarizationService, ConversationSummarizationService>();
 
 builder.Services.AddTransient<VehicleMapperService>();
 
@@ -87,6 +98,23 @@ builder.Services.AddRateLimiter(options =>
             Window = TimeSpan.FromMinutes(1),
             PermitLimit = 60,
             SegmentsPerWindow = 6,
+            QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+            QueueLimit = 0
+        });
+    });
+    
+    // Rate limiting for conversation API endpoints (10 requests per minute)
+    options.AddPolicy("conversationApi", context =>
+    {
+        var authHeader = context.Request.Headers["Authorization"].FirstOrDefault();
+        var token = authHeader?.Replace("Bearer ", "") ?? string.Empty;
+        var partitionKey = TokenHashHelper.GetTokenHash(token);
+        
+        return RateLimitPartition.GetSlidingWindowLimiter(partitionKey, _ => new SlidingWindowRateLimiterOptions
+        {
+            Window = TimeSpan.FromMinutes(1),
+            PermitLimit = 10,
+            SegmentsPerWindow = 2,
             QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
             QueueLimit = 0
         });
