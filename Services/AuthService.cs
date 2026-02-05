@@ -103,7 +103,6 @@ public class AuthService
 
         try
         {
-            // Handle the case where LoginEndpoint might be empty or the URL already includes the full path
             var endpoint = string.IsNullOrWhiteSpace(_loginEndpoint) 
                 ? _authApiUrl 
                 : $"{_authApiUrl}{_loginEndpoint}";
@@ -125,7 +124,6 @@ public class AuthService
 
             var response = await _httpClient.SendAsync(request);
 
-            // Log the full response details for debugging
             var responseContent = await response.Content.ReadAsStringAsync();
             _logger.LogInformation("Login response status: {StatusCode}, content: {Content}", 
                 response.StatusCode, responseContent);
@@ -137,7 +135,6 @@ public class AuthService
                 return null;
             }
 
-            // Parse the API response format
             TokenResponse? tokenResponse = null;
             try
             {
@@ -179,7 +176,7 @@ public class AuthService
                 AccessToken = tokenResponse.AccessToken,
                 RefreshToken = tokenResponse.RefreshToken,
                 ExpiresAt = DateTime.UtcNow.AddSeconds(tokenResponse.ExpiresIn),
-                RefreshExpiresAt = DateTime.UtcNow.AddDays(30) // Assume refresh token lasts 30 days
+                RefreshExpiresAt = DateTime.UtcNow.AddDays(30) 
             };
 
             _sessionStorage.StoreSessionTokens(sessionId, cachedTokens);

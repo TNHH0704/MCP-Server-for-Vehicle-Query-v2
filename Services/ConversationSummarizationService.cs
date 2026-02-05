@@ -37,18 +37,33 @@ public class ConversationSummarizationService : IConversationSummarizationServic
     {
         try
         {
-            // Get messages to summarize (all but the last K messages)
-            var allMessages = _contextService.GetRecentMessages(sessionId);
-            var messagesToSummarize = allMessages
-                .OrderBy(m => m.Timestamp)
-                .Take(allMessages.Count - _config.SummaryPreserveLastK)
+            var allMessagesFromDb = await _dbContext.ConversationEntries
+                .Where(e => e.SessionId == sessionId)
+                .OrderBy(e => e.Timestamp)
+                .Select(e => new ConversationEntry
+                {
+                    Id = e.Id,
+                    SessionId = e.SessionId,
+                    Timestamp = e.Timestamp,
+                    Role = e.Role,
+                    ToolName = e.ToolName,
+                    Message = e.Message,
+                    TokenCount = e.TokenCount
+                })
+                .ToListAsync();
+
+            var messagesToSummarize = allMessagesFromDb
+                .Take(allMessagesFromDb.Count - _config.SummaryPreserveLastK)
                 .ToList();
 
             if (messagesToSummarize.Count == 0)
             {
-                _logger.LogInformation("No messages to summarize for session {Session}", sessionId);
+                _logger.LogInformation("No messages to summarize for session {Session} (total: {Total}, preserving: {Preserve})", 
+                    sessionId, allMessagesFromDb.Count, _config.SummaryPreserveLastK);
                 return;
             }
+
+            _logger.LogInformation("Summarizing {Count} messages for session {Session}", messagesToSummarize.Count, sessionId);
 
             // Generate summary using AI
             var summaryText = await _aiService.SummarizeConversationAsync(messagesToSummarize);
@@ -122,16 +137,11 @@ public class ConversationSummarizationService : IConversationSummarizationServic
             
             _dbContext.ConversationSummaries.Add(newSummary);
             
-            // Save changes
             await _dbContext.SaveChangesAsync();
             
             _logger.LogInformation(
                 "Created summary for session {Session}: {MessageCount} messages, {TokenCount} tokens, sequence {Sequence}",
                 sessionId, messagesToSummarize.Count, totalTokens, newSequence);
-
-            // Remove summarized messages from in-memory queue
-            // Note: This is a simplified approach - in production, you might want to keep them in DB
-            // and only remove from the active working set
             
         }
         catch (Exception ex)

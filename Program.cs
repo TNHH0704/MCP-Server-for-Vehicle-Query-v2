@@ -35,7 +35,8 @@ builder.Services.AddDbContextFactory<ConversationDbContext>(options =>
     options.UseSqlite("Data Source=./data/conversation.db"));
 
 builder.Services.AddSingleton<IConversationContextService, InMemoryConversationContextService>();
-builder.Services.AddSingleton<ISessionStorageService, InMemorySessionStorageService>();
+// Use database-backed session storage for persistence across restarts
+builder.Services.AddSingleton<ISessionStorageService, DatabaseSessionStorageService>();
 builder.Services.AddScoped<RequestContextService>();
 builder.Services.AddSingleton<AuditLogService>();
 builder.Services.AddSingleton<IGitHubOpenAIService, GitHubOpenAIService>();
@@ -156,11 +157,12 @@ app.MapMcp("/sse").RequireRateLimiting("toolApi");
 
 app.MapControllers();
 
-app.MapFallbackToFile("index.html");
-
 app.MapGet("/api/session", (ISessionStorageService sessionStorage) => {
     var sessionId = sessionStorage.CreateAnonymousSession();
     return Results.Json(new { sessionId });
 });
+
+// Fallback must be LAST - after all API routes
+app.MapFallbackToFile("index.html");
 
 app.Run("http://0.0.0.0:8080");

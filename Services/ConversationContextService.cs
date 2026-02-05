@@ -46,17 +46,17 @@ public class InMemoryConversationContextService : IConversationContextService
     public void AddMessage(string sessionId, ConversationEntry entry)
     {
         entry.SessionId = sessionId;
-        
+
         // Calculate token count for this message
         entry.TokenCount = CountTokens(entry.Message);
 
         var queue = _sessions.GetOrAdd(sessionId, _ => new ConcurrentQueue<ConversationEntry>());
         queue.Enqueue(entry);
-        
+
         // Update running token count
         _sessionTokenCounts.AddOrUpdate(
-            sessionId, 
-            entry.TokenCount, 
+            sessionId,
+            entry.TokenCount,
             (_, currentCount) => currentCount + entry.TokenCount);
 
         while (queue.Count > _config.WindowSize)
@@ -65,8 +65,8 @@ public class InMemoryConversationContextService : IConversationContextService
             {
                 // Subtract dequeued message tokens from running count
                 _sessionTokenCounts.AddOrUpdate(
-                    sessionId, 
-                    0, 
+                    sessionId,
+                    0,
                     (_, currentCount) => Math.Max(0, currentCount - dequeuedEntry.TokenCount));
             }
         }
@@ -76,9 +76,47 @@ public class InMemoryConversationContextService : IConversationContextService
             PruneOldEntries(queue);
         }
 
-        _logger.LogDebug("Added message to session {Session}, queue size: {Size}, tokens: {Tokens}", 
+        _logger.LogDebug("Added message to session {Session}, queue size: {Size}, tokens: {Tokens}",
             sessionId, queue.Count, entry.TokenCount);
-        
+
+        // Persist to database asynchronously
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                using var dbContext = await _dbContextFactory.CreateDbContextAsync();
+
+                // Ensure session exists
+                if (!await dbContext.Sessions.AnyAsync(s => s.SessionId == sessionId))
+                {
+                    dbContext.Sessions.Add(new Data.Entities.SessionEntity
+                    {
+                        SessionId = sessionId,
+                        CreatedAt = DateTime.UtcNow
+                    });
+                }
+
+                // Add message entry with generated ID
+                dbContext.ConversationEntries.Add(new Data.Entities.ConversationEntryEntity
+                {
+                    Id = entry.Id, // Use the ID from the ConversationEntry (already a GUID)
+                    SessionId = sessionId,
+                    Role = entry.Role,
+                    Message = entry.Message,
+                    ToolName = entry.ToolName,
+                    TokenCount = entry.TokenCount,
+                    Timestamp = entry.Timestamp
+                });
+
+                await dbContext.SaveChangesAsync();
+                _logger.LogDebug("Persisted message to database for session {Session}", sessionId);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to persist message to database for session {Session}", sessionId);
+            }
+        });
+
         // Trigger summarization check asynchronously (fire-and-forget)
         _ = TriggerSummarizationIfNeededAsync(sessionId);
     }
@@ -105,7 +143,7 @@ public class InMemoryConversationContextService : IConversationContextService
     public async Task<string> GetFormattedContextAsync(string sessionId, string? systemPrompt = null)
     {
         var sb = new System.Text.StringBuilder();
-        
+
         // 1. Always include system prompt first (if provided)
         if (!string.IsNullOrEmpty(systemPrompt))
         {
@@ -113,7 +151,7 @@ public class InMemoryConversationContextService : IConversationContextService
             sb.AppendLine(systemPrompt);
             sb.AppendLine();
         }
-        
+
         // 2. Fetch summaries from database (ordered by sequence)
         try
         {
@@ -122,7 +160,7 @@ public class InMemoryConversationContextService : IConversationContextService
                 .Where(s => s.SessionId == sessionId)
                 .OrderBy(s => s.SummarySequence)
                 .ToListAsync();
-            
+
             if (summaries.Any())
             {
                 sb.AppendLine("## Conversation Summary");
@@ -138,10 +176,10 @@ public class InMemoryConversationContextService : IConversationContextService
         {
             _logger.LogWarning(ex, "Failed to fetch summaries for session {Session}", sessionId);
         }
-        
+
         // 3. Include recent messages (last K messages as configured)
         var messages = GetRecentMessages(sessionId, _config.SummaryPreserveLastK);
-        
+
         if (messages.Any())
         {
             sb.AppendLine("## Recent Messages");
@@ -153,9 +191,9 @@ public class InMemoryConversationContextService : IConversationContextService
                 var timestamp = msg.Timestamp.ToString("yyyy-MM-dd HH:mm:ss");
                 var role = msg.Role.ToUpper();
                 var toolInfo = !string.IsNullOrEmpty(msg.ToolName) ? $" [{msg.ToolName}]" : "";
-                
+
                 sb.AppendLine($"[{timestamp}] {role}{toolInfo}: {msg.Message}");
-                
+
                 if (msg.Metadata != null && msg.Metadata.Any())
                 {
                     sb.AppendLine($"  Metadata: {System.Text.Json.JsonSerializer.Serialize(msg.Metadata)}");
@@ -174,41 +212,41 @@ public class InMemoryConversationContextService : IConversationContextService
     {
         return _sessions.TryGetValue(sessionId, out var queue) ? queue.Count : 0;
     }
-    
+
     public int GetTokenCount(string sessionId)
     {
         return _sessionTokenCounts.TryGetValue(sessionId, out var count) ? count : 0;
     }
-    
+
     public async Task TriggerSummarizationIfNeededAsync(string sessionId)
     {
         if (!_config.SummaryEnabled)
         {
             return;
         }
-        
+
         var messageCount = GetMessageCount(sessionId);
         var tokenCount = GetTokenCount(sessionId);
-        
+
         // Check if either threshold is exceeded
-        var shouldSummarize = messageCount >= _config.SummaryThreshold || 
+        var shouldSummarize = messageCount >= _config.SummaryThreshold ||
                              tokenCount >= _config.TokenBudgetForSummary;
-        
+
         if (!shouldSummarize)
         {
             return;
         }
-        
+
         _logger.LogInformation(
             "Summarization triggered for session {Session}: {Messages} messages, {Tokens} tokens",
             sessionId, messageCount, tokenCount);
-        
+
         try
         {
             // Use service locator pattern to avoid circular dependency
             using var scope = _serviceProvider.CreateScope();
             var summarizationService = scope.ServiceProvider.GetService<IConversationSummarizationService>();
-            
+
             if (summarizationService != null)
             {
                 await summarizationService.SummarizeAsync(sessionId);
@@ -223,14 +261,14 @@ public class InMemoryConversationContextService : IConversationContextService
             _logger.LogError(ex, "Error during summarization for session {Session}", sessionId);
         }
     }
-    
+
     private int CountTokens(string text)
     {
         if (string.IsNullOrEmpty(text))
         {
             return 0;
         }
-        
+
         try
         {
             return _tokenizer.Encode(text).Count;
@@ -238,7 +276,6 @@ public class InMemoryConversationContextService : IConversationContextService
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Error counting tokens, using fallback estimation");
-            // Fallback: rough estimation (1 token ≈ 4 characters)
             return text.Length / 4;
         }
     }
@@ -246,7 +283,7 @@ public class InMemoryConversationContextService : IConversationContextService
     private void PruneOldEntries(ConcurrentQueue<ConversationEntry> queue)
     {
         var cutoffTime = DateTime.UtcNow - _config.MaxAge;
-        
+
         var tempQueue = new Queue<ConversationEntry>();
         while (queue.TryDequeue(out var entry))
         {
@@ -255,7 +292,7 @@ public class InMemoryConversationContextService : IConversationContextService
                 tempQueue.Enqueue(entry);
             }
         }
-        
+
         while (tempQueue.Count > 0)
         {
             queue.Enqueue(tempQueue.Dequeue());

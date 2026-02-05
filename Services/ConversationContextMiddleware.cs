@@ -26,16 +26,12 @@ public class ConversationContextMiddleware
     {
         try
         {
-            // Read bearer token from Authorization header if present
             var authHeader = context.Request.Headers["Authorization"].FirstOrDefault();
             if (!string.IsNullOrEmpty(authHeader) && authHeader.StartsWith("Bearer "))
             {
                 var token = authHeader.Substring("Bearer ".Length).Trim();
                 RequestContextService.SetToken(token);
             }
-
-            // NOTE: Auto-parsing of POST bodies and automatic context population was intentionally removed.
-            // Clients should call the explicit API endpoint POST /api/ConversationContext/add to add user messages to context.
 
             await _next(context);
         }
