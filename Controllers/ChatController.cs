@@ -107,55 +107,75 @@ public class ChatController : ControllerBase
 
             var content = await response.Content.ReadAsStringAsync();
             
-            // Track conversation messages for summarization
-            if (!string.IsNullOrEmpty(sessionId) && request.Messages != null)
+            // Save user message and assistant response to conversation history
+            try
             {
-                _logger.LogInformation("[Chat] Tracking messages for session {SessionId}", sessionId);
-                try
+                // Check if this is a tool response call (contains tool messages)
+                bool isToolResponseCall = false;
+                if (request.Messages is System.Text.Json.JsonElement messagesElement && 
+                    messagesElement.ValueKind == System.Text.Json.JsonValueKind.Array)
                 {
-                    // Messages is sent as object, need to cast to list
-                    if (request.Messages is System.Text.Json.JsonElement messagesElement && 
-                        messagesElement.ValueKind == System.Text.Json.JsonValueKind.Array)
+                    isToolResponseCall = messagesElement.EnumerateArray().Any(m => 
+                        m.TryGetProperty("role", out var role) && role.GetString() == "tool");
+                }
+                
+                // Only save user message if this is NOT a tool response call
+                if (!isToolResponseCall && 
+                    request.Messages is System.Text.Json.JsonElement userMessagesElement && 
+                    userMessagesElement.ValueKind == System.Text.Json.JsonValueKind.Array)
+                {
+                    var messagesArray = userMessagesElement.EnumerateArray().ToList();
+                    var lastUserMessage = messagesArray.LastOrDefault(m => 
+                        m.TryGetProperty("role", out var role) && role.GetString() == "user");
+                    
+                    if (lastUserMessage.ValueKind != System.Text.Json.JsonValueKind.Undefined &&
+                        lastUserMessage.TryGetProperty("content", out var userContent))
                     {
-                        var messageCount = 0;
-                        foreach (var msgElement in messagesElement.EnumerateArray())
+                        var userText = userContent.GetString();
+                        if (!string.IsNullOrEmpty(userText))
                         {
-                            if (msgElement.TryGetProperty("role", out var roleElement) &&
-                                msgElement.TryGetProperty("content", out var contentElement))
+                            _contextService.AddMessage(sessionId, new ConversationEntry
                             {
-                                var role = roleElement.GetString();
-                                var messageContent = contentElement.GetString();
-                                
-                                if ((role == "user" || role == "assistant") && !string.IsNullOrEmpty(messageContent))
+                                Role = "user",
+                                Message = userText,
+                                Timestamp = DateTime.UtcNow
+                            });
+                            _logger.LogDebug("[Chat] Saved user message for session {SessionId}", sessionId);
+                        }
+                    }
+                }
+                
+                // Parse and save assistant's final response (only if it's NOT a tool call response)
+                var responseJson = System.Text.Json.JsonSerializer.Deserialize<System.Text.Json.JsonElement>(content);
+                if (responseJson.TryGetProperty("choices", out var choices) && 
+                    choices.ValueKind == System.Text.Json.JsonValueKind.Array)
+                {
+                    var firstChoice = choices.EnumerateArray().FirstOrDefault();
+                    if (firstChoice.ValueKind != System.Text.Json.JsonValueKind.Undefined &&
+                        firstChoice.TryGetProperty("message", out var message))
+                    {
+                        // Only save if the response has actual content (not just tool_calls)
+                        if (message.TryGetProperty("content", out var assistantContent))
+                        {
+                            var assistantText = assistantContent.GetString();
+                            if (!string.IsNullOrEmpty(assistantText))
+                            {
+                                _contextService.AddMessage(sessionId, new ConversationEntry
                                 {
-                                    _contextService.AddMessage(sessionId, new ConversationEntry
-                                    {
-                                        Role = role,
-                                        Message = messageContent,
-                                        Timestamp = DateTime.UtcNow
-                                    });
-                                    messageCount++;
-                                }
+                                    Role = "assistant",
+                                    Message = assistantText,
+                                    Timestamp = DateTime.UtcNow
+                                });
+                                _logger.LogDebug("[Chat] Saved assistant response for session {SessionId}", sessionId);
                             }
                         }
-                        _logger.LogInformation("[Chat] Tracked {Count} messages for session {SessionId}", messageCount, sessionId);
                     }
-                    else
-                    {
-                        _logger.LogWarning("[Chat] Messages is not a JSON array for session {SessionId}", sessionId);
-                    }
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogWarning(ex, "Failed to track conversation messages for session {SessionId}", sessionId);
                 }
             }
-            else
+            catch (Exception ex)
             {
-                if (string.IsNullOrEmpty(sessionId))
-                    _logger.LogWarning("[Chat] No session ID provided in request");
-                else if (request.Messages == null)
-                    _logger.LogWarning("[Chat] No messages in request");
+                _logger.LogWarning(ex, "[Chat] Failed to save conversation messages for session {SessionId}", sessionId);
+                // Don't fail the request if message saving fails
             }
             
             return Content(content, "application/json");

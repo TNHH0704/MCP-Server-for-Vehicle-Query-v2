@@ -14,17 +14,20 @@ public class ConversationController : ControllerBase
     private readonly IConversationContextService _contextService;
     private readonly IConversationSummarizationService _summarizationService;
     private readonly ConversationDbContext _dbContext;
+    private readonly ISessionStorageService _sessionService;
     private readonly ILogger<ConversationController> _logger;
 
     public ConversationController(
         IConversationContextService contextService,
         IConversationSummarizationService summarizationService,
         ConversationDbContext dbContext,
+        ISessionStorageService sessionService,
         ILogger<ConversationController> logger)
     {
         _contextService = contextService;
         _summarizationService = summarizationService;
         _dbContext = dbContext;
+        _sessionService = sessionService;
         _logger = logger;
     }
 
@@ -176,6 +179,120 @@ public class ConversationController : ControllerBase
         {
             _logger.LogError(ex, "Failed to get formatted context for session {SessionId}", sessionId);
             return StatusCode(500, new { error = "Failed to retrieve context" });
+        }
+    }
+
+    /// <summary>
+    /// Get conversation message history for the current user (newest first)
+    /// </summary>
+    [HttpGet("messages")]
+    public async Task<IActionResult> GetMessages(
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 50)
+    {
+        try
+        {
+            // Get session from bearer token
+            var authHeader = Request.Headers["Authorization"].FirstOrDefault();
+            if (string.IsNullOrEmpty(authHeader) || !authHeader.StartsWith("Bearer "))
+            {
+                return Unauthorized(new { error = "Bearer token required" });
+            }
+
+            var bearerToken = authHeader.Substring("Bearer ".Length).Trim();
+            var sessionId = _sessionService.GetOrCreateSessionId(bearerToken);
+
+            // Validate pagination
+            if (page < 1) page = 1;
+            if (pageSize < 1) pageSize = 50;
+            if (pageSize > 100) pageSize = 100;
+
+            // Query only user and assistant messages, newest first
+            var query = _dbContext.ConversationEntries
+                .Where(e => e.SessionId == sessionId && (e.Role == "user" || e.Role == "assistant"))
+                .OrderByDescending(e => e.Timestamp);
+
+            var totalCount = await query.CountAsync();
+            var messages = await query
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .Select(e => new
+                {
+                    id = e.Id,
+                    timestamp = e.Timestamp,
+                    role = e.Role,
+                    message = e.Message,
+                    toolName = e.ToolName,
+                    tokenCount = e.TokenCount
+                })
+                .ToListAsync();
+
+            _logger.LogInformation("Retrieved {Count} messages for session {SessionId} (page {Page})", 
+                messages.Count, sessionId, page);
+
+            return Ok(new
+            {
+                messages,
+                totalCount,
+                page,
+                pageSize,
+                hasMore = (page * pageSize) < totalCount
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to retrieve message history");
+            return StatusCode(500, new { error = "Failed to retrieve messages" });
+        }
+    }
+
+    /// <summary>
+    /// Clear all conversation history for the current user
+    /// </summary>
+    [HttpDelete("clear")]
+    public async Task<IActionResult> ClearConversation()
+    {
+        try
+        {
+            // Get session from bearer token
+            var authHeader = Request.Headers["Authorization"].FirstOrDefault();
+            if (string.IsNullOrEmpty(authHeader) || !authHeader.StartsWith("Bearer "))
+            {
+                return Unauthorized(new { error = "Bearer token required" });
+            }
+
+            var bearerToken = authHeader.Substring("Bearer ".Length).Trim();
+            var sessionId = _sessionService.GetOrCreateSessionId(bearerToken);
+
+            // Clear in-memory context
+            _contextService.ClearSession(sessionId);
+
+            // Hard delete from database
+            var messagesDeleted = await _dbContext.ConversationEntries
+                .Where(e => e.SessionId == sessionId)
+                .ExecuteDeleteAsync();
+
+            var summariesDeleted = await _dbContext.ConversationSummaries
+                .Where(s => s.SessionId == sessionId)
+                .ExecuteDeleteAsync();
+
+            await _dbContext.SaveChangesAsync();
+
+            _logger.LogInformation("Cleared conversation for session {SessionId}: {Messages} messages, {Summaries} summaries",
+                sessionId, messagesDeleted, summariesDeleted);
+
+            return Ok(new
+            {
+                success = true,
+                message = "Conversation history cleared",
+                messagesDeleted,
+                summariesDeleted
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to clear conversation history");
+            return StatusCode(500, new { error = "Failed to clear conversation" });
         }
     }
 }

@@ -33,7 +33,7 @@ public class GitHubOpenAIService : IGitHubOpenAIService
 
         var endpoint = config["OpenAI__Endpoint"] ?? "https://models.inference.ai.azure.com";
         var apiKey = Environment.GetEnvironmentVariable("OPENAI_API_KEY") ?? config["OpenAI__ApiKey"];
-        _deploymentName = config["OpenAI__DeploymentName"] ?? "Meta-Llama-3.1-8B-Instruct";
+        _deploymentName = config["OpenAI__DeploymentName"] ?? "gpt-4.1-mini";
         _maxTokens = config.GetValue<int>("OpenAI__MaxTokens", 1000);
         _temperature = config.GetValue<double>("OpenAI__Temperature", 0.1);
         _fallbackEnabled = config.GetValue<bool>("OpenAI__FallbackEnabled", true);

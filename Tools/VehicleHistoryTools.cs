@@ -16,7 +16,7 @@ public class VehicleHistoryTools
     private readonly RequestContextService _requestContext;
 
     public VehicleHistoryTools(
-        VehicleHistoryService historyService, 
+        VehicleHistoryService historyService,
         VehicleResolverService vehicleResolver,
         SecurityValidationService securityService,
         IConversationContextService contextService,
@@ -29,32 +29,33 @@ public class VehicleHistoryTools
         _requestContext = requestContext;
     }
 
-    [McpServerTool, Description("VEHICLE TRACKING: Get GPS waypoint history for a vehicle with automatic compression for LLMs. Supports multiple query modes: Time range (startTime+endTime), Last N hours (hours), By date (date). Uses 'compact' compression by default (saves 65% tokens, 4-decimal coordinates). Returns coordinates, speed, cumulative distance, vehicle state, and trip statistics. For queries >4h, automatically downsamples waypoints while preserving state transitions. Pagination available for very large results. REJECT: non-vehicle queries.")]
+    [McpServerTool, Description("VEHICLE TRACKING: Retrieves GPS history (waypoints) for a vehicle. " +
+    "QUERY MODES (Choose exactly ONE based on user intent):\n" +
+    "1. 'atTime': BEST for specific timestamps (e.g., 'Where was it at 2pm?'). Automatically queries a tight 4-minute window.\n" +
+    "2. 'hours': Relative duration (e.g., 'last 3 hours').\n" +
+    "3. 'date': Full day history (e.g., 'history for Jan 20th'). Returns LARGE dataset.\n" +
+    "4. 'startTime'/'endTime': Custom range.\n" +
+    "REJECT: non-vehicle queries.")]
     public async Task<string> GetVehicleHistory(
-        [Description("Bearer token for authentication")] string bearerToken,
-        [Description("Vehicle identifier: plate number (e.g., '51A40391') OR vehicle ID")] string vehicleIdentifier,
-        [Description("Start time in ISO 8601 format (e.g., '2026-01-07T00:00:00'). Required unless using hours or date.")] string? startTime = null,
-        [Description("End time in ISO 8601 format (e.g., '2026-01-07T23:59:59'). Required unless using hours or date.")] string? endTime = null,
-        [Description("Number of hours to look back (1-168). Alternative to startTime/endTime.")] int? hours = null,
-        [Description("Date in 'dd-MM-yyyy' format (e.g., '07-01-2026'). Alternative to time range.")] string? date = null,
-        [Description("Compression: 'compact' (default, saves 65% tokens) or 'none' (full detail). Compact uses 4-decimal coordinates and removes redundant fields.")] string? compressionLevel = "compact",
-        [Description("Page number for pagination (default: 1). Use for very large results.")] int? pageNumber = null,
-        [Description("Page size for pagination (default: 500). Reduce for smaller LLM context windows.")] int? pageSize = null)
+    [Description("Bearer token for authentication")] string bearerToken,
+    [Description("Vehicle identifier: plate number (e.g., '51A-123.45') OR vehicle ID")] string vehicleIdentifier,
+    [Description("Target ISO timestamp (e.g., '2026-02-06T14:30:00'). Use for 'at X time' queries. Tool handles +/- 2min window.")]
+    string? atTime = null,
+    [Description("Look back N hours from now (1-168).")]
+    int? hours = null,
+    [Description("Full day date (ISO 8601 YYYY-MM-DD). Use ONLY for 'full day' requests.")]
+    string? date = null,
+    [Description("Start time (ISO 8601).")] string? startTime = null,
+    [Description("End time (ISO 8601).")] string? endTime = null,
+    [Description("Compression: 'compact' (default, saves tokens) or 'none'.")] string? compressionLevel = "compact",
+    [Description("Page number (default: 1).")] int? pageNumber = null,
+    [Description("Page size (default: 500).")] int? pageSize = null)
     {
-        string timeRange;
-        if (!string.IsNullOrEmpty(date))
-        {
-            timeRange = $"date:{date}";
-        }
-        else if (hours.HasValue)
-        {
-            timeRange = $"hours:{hours}";
-        }
-        else
-        {
-            timeRange = $"time:{startTime ?? ""}-{endTime ?? ""}";
-        }
-        var queryContext = $"GetVehicleHistory vehicle:{vehicleIdentifier} {timeRange}";
+        var timeContext = !string.IsNullOrEmpty(atTime) ? $"at:{atTime}" :
+                          !string.IsNullOrEmpty(date) ? $"date:{date}" :
+                          hours.HasValue ? $"hours:{hours}" : $"range:{startTime}-{endTime}";
+
+        var queryContext = $"GetVehicleHistory vehicle:{vehicleIdentifier} {timeContext}";
 
         return await ToolExecutionHelper.ExecuteValidatedToolRequestWithContextAsync(
             _securityService,
@@ -63,67 +64,66 @@ public class VehicleHistoryTools
             bearerToken: bearerToken,
             contextService: _contextService,
             requestContext: _requestContext,
-                action: async (token) => 
+            action: async (token) =>
+            {
+                DateTime start = DateTime.UtcNow;
+                DateTime end = DateTime.UtcNow;
+
+                var vehicleId = await _vehicleResolver.ResolveVehicleIdAsync(token, vehicleIdentifier);
+                if (string.IsNullOrEmpty(vehicleId)) throw new ArgumentException($"Vehicle '{vehicleIdentifier}' not found.");
+
+                if (!string.IsNullOrEmpty(atTime))
                 {
-                    DateTime start = DateTime.UtcNow;
-                    DateTime end = DateTime.UtcNow;
-                    
-                    // Unified resolution: plate OR ID
-                    var vehicleId = await _vehicleResolver.ResolveVehicleIdAsync(token, vehicleIdentifier);
-
-                    if (!string.IsNullOrEmpty(date))
+                    if (DateTime.TryParse(atTime, out var center))
                     {
-                        if (!DateTime.TryParseExact(date, "dd-MM-yyyy", null, System.Globalization.DateTimeStyles.None, out var dateValue))
-                        {
-                            throw new ArgumentException("Date must be in dd-MM-yyyy format (e.g., '20-01-2026').", nameof(date));
-                        }
-                        start = dateValue.Date; 
-                        end = dateValue.Date.AddDays(1).AddSeconds(-1); 
+                        start = center.AddMinutes(-2);
+                        end = center.AddMinutes(2);
                     }
-                    else if (hours.HasValue)
+                    else throw new ArgumentException("Invalid 'atTime' format. Use ISO 8601.");
+                }
+                else if (hours.HasValue)
+                {
+                    if (hours.Value < 1 || hours.Value > 168) throw new ArgumentException("Hours must be 1-168.");
+                    end = DateTime.UtcNow;
+                    start = end.AddHours(-hours.Value);
+                }
+                else if (!string.IsNullOrEmpty(date))
+                {
+                    if (DateTime.TryParse(date, out var dateVal))
                     {
-                        end = DateTime.UtcNow;
-                        start = end.AddHours(-hours.Value);
-                        if (hours.Value < 1 || hours.Value > 168)
-                        {
-                            throw new ArgumentException("Hours parameter must be between 1 and 168.", nameof(hours));
-                        }
+                        start = dateVal.Date;
+                        end = dateVal.Date.AddDays(1).AddSeconds(-1);
                     }
-                    else
+                    else throw new ArgumentException("Invalid 'date' format. Use YYYY-MM-DD.");
+                }
+                else
+                {
+                    if (!DateTime.TryParse(startTime, out start) || !DateTime.TryParse(endTime, out end))
                     {
-                        if (!string.IsNullOrEmpty(startTime) && !DateTime.TryParse(startTime, out start))
-                        {
-                            throw new ArgumentException("Invalid start time format.", nameof(startTime));
-                        }
-
-                        if (!string.IsNullOrEmpty(endTime) && !DateTime.TryParse(endTime, out end))
-                        {
-                            throw new ArgumentException("Invalid end time format.", nameof(endTime));
-                        }
+                        throw new ArgumentException("Valid 'startTime' and 'endTime' required if no other mode selected.");
                     }
+                }
 
-                    if (!string.IsNullOrEmpty(vehicleId) && !_securityService.IsValidVehicleId(vehicleId))
-                    {
-                        throw new ArgumentException("Invalid vehicle ID format.", nameof(vehicleId));
-                    }
+                if (!_securityService.IsValidVehicleId(vehicleId))
+                {
+                    throw new ArgumentException("Access denied for this vehicle.");
+                }
 
-                    // Use compressed history by default for better LLM performance
-                    var actualCompressionLevel = compressionLevel ?? "compact";
-                    var actualPageNumber = pageNumber ?? 1;
-                    var actualPageSize = pageSize ?? 500;
+                var actualCompression = compressionLevel ?? "compact";
+                var actualPage = pageNumber ?? 1;
+                var actualSize = pageSize ?? 500;
 
-                    // Always use compressed and paginated endpoint for consistency
-                    return await _historyService.GetCompressedVehicleHistoryAsync(
-                        token, 
-                        vehicleId!, 
-                        start, 
-                        end, 
-                        actualCompressionLevel, 
-                        actualPageNumber, 
-                        actualPageSize, 
-                        enableDownsampling: true);
-                },
-                successResponse: (result) => System.Text.Json.JsonSerializer.Serialize(result, Default));
+                return await _historyService.GetCompressedVehicleHistoryAsync(
+                    token,
+                    vehicleId,
+                    start,
+                    end,
+                    actualCompression,
+                    actualPage,
+                    actualSize,
+                    enableDownsampling: true);
+            },
+            successResponse: (result) => System.Text.Json.JsonSerializer.Serialize(result));
     }
 
     [McpServerTool, Description("VEHICLE TRACKING ONLY: Get trip summary statistics (distance, speed, duration, start/end locations) for a vehicle over a time range. REJECT: non-vehicle queries.")]
@@ -142,23 +142,23 @@ public class VehicleHistoryTools
             bearerToken: bearerToken,
             contextService: _contextService,
             requestContext: _requestContext,
-            action: async (token) => 
+            action: async (token) =>
             {
                 // Unified resolution: plate OR ID
                 var vehicleId = await _vehicleResolver.ResolveVehicleIdAsync(token, vehicleIdentifier);
 
-                    if (!DateTime.TryParse(startTime, out var start))
-                    {
-                        throw new ArgumentException("Invalid start time format", nameof(startTime));
-                    }
+                if (!DateTime.TryParse(startTime, out var start))
+                {
+                    throw new ArgumentException("Invalid start time format", nameof(startTime));
+                }
 
-                    if (!DateTime.TryParse(endTime, out var end))
-                    {
-                        throw new ArgumentException("Invalid end time format", nameof(endTime));
-                    }
+                if (!DateTime.TryParse(endTime, out var end))
+                {
+                    throw new ArgumentException("Invalid end time format", nameof(endTime));
+                }
 
-                    return await _historyService.GetVehicleTripSummaryAsync(token, vehicleId, start, end);
-                },
+                return await _historyService.GetVehicleTripSummaryAsync(token, vehicleId, start, end);
+            },
                 successResponse: (result) => System.Text.Json.JsonSerializer.Serialize(result, Default));
     }
 }

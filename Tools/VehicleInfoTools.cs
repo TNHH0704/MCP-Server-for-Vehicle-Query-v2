@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using McpVersionVer2.Models.Dto;
 using McpVersionVer2.Services;
 using McpVersionVer2.Services.Mappers;
 using McpVersionVer2.Helpers;
@@ -11,19 +12,22 @@ namespace McpVersionVer2.Tools;
 public class VehicleInfoTools
 {
     private readonly VehicleService _vehicleService;
+    private readonly VehicleResolverService _vehicleResolver;
     private readonly VehicleMapperService _mapper;
     private readonly SecurityValidationService _securityService;
     private readonly IConversationContextService _contextService;
     private readonly RequestContextService _requestContext;
 
     public VehicleInfoTools(
-        VehicleService vehicleService, 
+        VehicleService vehicleService,
+        VehicleResolverService vehicleResolver,
         VehicleMapperService mapper, 
         SecurityValidationService securityService,
         IConversationContextService contextService,
         RequestContextService requestContext)
     {
         _vehicleService = vehicleService;
+        _vehicleResolver = vehicleResolver;
         _mapper = mapper;
         _securityService = securityService;
         _contextService = contextService;
@@ -48,9 +52,20 @@ public class VehicleInfoTools
             requestContext: _requestContext,
             action: async (token) => 
             {
-                var vehicles = await _vehicleService.GetVehiclesWithFilterAsync(token, plate, id, group);
-                vehicles.RequireNonEmptyResult("vehicles");
-                return vehicles;
+                // Use VehicleResolverService when a specific vehicle identifier is provided
+                if (!string.IsNullOrWhiteSpace(plate) || !string.IsNullOrWhiteSpace(id))
+                {
+                    var identifier = plate ?? id!;
+                    var vehicle = await _vehicleResolver.ResolveVehicleAsync(token, identifier);
+                    var vehicles = new List<VehicleResponse> { vehicle };
+                    vehicles.RequireNonEmptyResult("vehicles");
+                    return vehicles;
+                }
+                
+                // For group filter or all vehicles, use the original service
+                var allVehicles = await _vehicleService.GetVehiclesWithFilterAsync(token, null, null, group);
+                allVehicles.RequireNonEmptyResult("vehicles");
+                return allVehicles;
             },
             successResponse: (vehicles) => 
             {

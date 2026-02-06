@@ -15,23 +15,24 @@ public class VehicleLiveStatusTools
     private const double SPEED_DIVISOR = 100.0;
 
     private readonly VehicleStatusService _statusService;
+    private readonly VehicleResolverService _vehicleResolver;
     private readonly VehicleStatusMapperService _mapper;
     private readonly SecurityValidationService _securityService;
     private readonly IConversationContextService _contextService;
     private readonly RequestContextService _requestContext;
 
     public VehicleLiveStatusTools(
-        VehicleStatusService statusService, 
+        VehicleStatusService statusService,
+        VehicleResolverService vehicleResolver,
         VehicleStatusMapperService mapper, 
         SecurityValidationService securityService,
         IConversationContextService contextService,
         RequestContextService requestContext)
     {
         _statusService = statusService;
+        _vehicleResolver = vehicleResolver;
         _mapper = mapper;
         _securityService = securityService;
-        _contextService = contextService;
-        _requestContext = requestContext;
         _contextService = contextService;
         _requestContext = requestContext;
     }
@@ -65,8 +66,19 @@ public class VehicleLiveStatusTools
             requestContext: _requestContext,
             action: async (token) => 
             {
-                var vehicles = await _statusService.GetVehiclesWithFilterAsync(token, plate, id, group, type);
-                return _statusService.FilterByStatus(vehicles, status);
+                // Use VehicleResolverService when a specific vehicle identifier is provided (without group/type filters)
+                if ((!string.IsNullOrWhiteSpace(plate) || !string.IsNullOrWhiteSpace(id)) && 
+                    string.IsNullOrWhiteSpace(group) && string.IsNullOrWhiteSpace(type))
+                {
+                    var identifier = plate ?? id!;
+                    var resolvedVehicleId = await _vehicleResolver.ResolveVehicleIdAsync(token, identifier);
+                    var vehicles = await _statusService.GetVehiclesWithFilterAsync(token, null, resolvedVehicleId, null, null);
+                    return _statusService.FilterByStatus(vehicles, status);
+                }
+                
+                // For group/type filters or all vehicles, use the original service
+                var allVehicles = await _statusService.GetVehiclesWithFilterAsync(token, plate, id, group, type);
+                return _statusService.FilterByStatus(allVehicles, status);
             },
             successResponse: (vehicles) =>
             {
@@ -92,9 +104,19 @@ public class VehicleLiveStatusTools
             requestContext: _requestContext,
             action: async (token) => 
             {
-                var vehicles = await _statusService.GetVehiclesWithFilterAsync(token, plate, null, null, null);
-                vehicles.RequireNonEmptyResult("vehicle statuses", "No vehicles found.");
-                return vehicles;
+                // Use VehicleResolverService when a specific plate is provided
+                if (!string.IsNullOrWhiteSpace(plate))
+                {
+                    var resolvedVehicleId = await _vehicleResolver.ResolveVehicleIdAsync(token, plate);
+                    var vehicles = await _statusService.GetVehiclesWithFilterAsync(token, null, resolvedVehicleId, null, null);
+                    vehicles.RequireNonEmptyResult("vehicle statuses", "No vehicles found.");
+                    return vehicles;
+                }
+                
+                // Get all vehicles if no plate specified
+                var allVehicles = await _statusService.GetVehiclesWithFilterAsync(token, null, null, null, null);
+                allVehicles.RequireNonEmptyResult("vehicle statuses", "No vehicles found.");
+                return allVehicles;
             },
             successResponse: (vehicles) =>
             {
@@ -121,9 +143,19 @@ public class VehicleLiveStatusTools
             requestContext: _requestContext,
             action: async (token) => 
             {
-                var vehicles = await _statusService.GetVehiclesWithFilterAsync(token, plate, null, null, null);
-                vehicles.RequireNonEmptyResult("vehicle statuses", "No vehicles found.");
-                return vehicles;
+                // Use VehicleResolverService when a specific plate is provided
+                if (!string.IsNullOrWhiteSpace(plate))
+                {
+                    var resolvedVehicleId = await _vehicleResolver.ResolveVehicleIdAsync(token, plate);
+                    var vehicles = await _statusService.GetVehiclesWithFilterAsync(token, null, resolvedVehicleId, null, null);
+                    vehicles.RequireNonEmptyResult("vehicle statuses", "No vehicles found.");
+                    return vehicles;
+                }
+                
+                // Get all vehicles if no plate specified
+                var allVehicles = await _statusService.GetVehiclesWithFilterAsync(token, null, null, null, null);
+                allVehicles.RequireNonEmptyResult("vehicle statuses", "No vehicles found.");
+                return allVehicles;
             },
             successResponse: (vehicles) =>
             {
