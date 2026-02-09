@@ -7,5 +7,5 @@ namespace McpVersionVer2.Models.Dto;
 /// </summary>
 public class VehicleSearchResultDto : SearchResult<VehicleSummaryDto>
 {
-    // Properties inherited from SearchResult<VehicleSummaryDto>
+    
 }

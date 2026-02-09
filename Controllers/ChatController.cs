@@ -35,12 +35,10 @@ public class ChatController : ControllerBase
 
         try
         {
-            // Extract session ID from request headers, or auto-generate from bearer token
             var sessionId = Request.Headers["X-Session-Id"].FirstOrDefault();
             
             if (string.IsNullOrEmpty(sessionId))
             {
-                // Get bearer token and auto-determine session
                 var authHeader = Request.Headers["Authorization"].FirstOrDefault();
                 if (!string.IsNullOrEmpty(authHeader) && authHeader.StartsWith("Bearer "))
                 {
@@ -50,7 +48,6 @@ public class ChatController : ControllerBase
                 }
                 else
                 {
-                    // Anonymous session
                     sessionId = _sessionService.CreateAnonymousSession();
                     _logger.LogInformation("[Chat] Created anonymous session: {SessionId}", sessionId);
                 }
@@ -83,7 +80,6 @@ public class ChatController : ControllerBase
                 var errorBody = await response.Content.ReadAsStringAsync();
                 _logger.LogError("[Azure Error] {ErrorBody}", errorBody);
                 
-                // Parse and handle content filter errors
                 try
                 {
                     var errorJson = System.Text.Json.JsonSerializer.Deserialize<System.Text.Json.JsonElement>(errorBody);
@@ -107,10 +103,8 @@ public class ChatController : ControllerBase
 
             var content = await response.Content.ReadAsStringAsync();
             
-            // Save user message and assistant response to conversation history
             try
             {
-                // Check if this is a tool response call (contains tool messages)
                 bool isToolResponseCall = false;
                 if (request.Messages is System.Text.Json.JsonElement messagesElement && 
                     messagesElement.ValueKind == System.Text.Json.JsonValueKind.Array)
@@ -119,7 +113,6 @@ public class ChatController : ControllerBase
                         m.TryGetProperty("role", out var role) && role.GetString() == "tool");
                 }
                 
-                // Only save user message if this is NOT a tool response call
                 if (!isToolResponseCall && 
                     request.Messages is System.Text.Json.JsonElement userMessagesElement && 
                     userMessagesElement.ValueKind == System.Text.Json.JsonValueKind.Array)
@@ -145,7 +138,6 @@ public class ChatController : ControllerBase
                     }
                 }
                 
-                // Parse and save assistant's final response (only if it's NOT a tool call response)
                 var responseJson = System.Text.Json.JsonSerializer.Deserialize<System.Text.Json.JsonElement>(content);
                 if (responseJson.TryGetProperty("choices", out var choices) && 
                     choices.ValueKind == System.Text.Json.JsonValueKind.Array)
@@ -154,7 +146,6 @@ public class ChatController : ControllerBase
                     if (firstChoice.ValueKind != System.Text.Json.JsonValueKind.Undefined &&
                         firstChoice.TryGetProperty("message", out var message))
                     {
-                        // Only save if the response has actual content (not just tool_calls)
                         if (message.TryGetProperty("content", out var assistantContent))
                         {
                             var assistantText = assistantContent.GetString();
@@ -175,7 +166,6 @@ public class ChatController : ControllerBase
             catch (Exception ex)
             {
                 _logger.LogWarning(ex, "[Chat] Failed to save conversation messages for session {SessionId}", sessionId);
-                // Don't fail the request if message saving fails
             }
             
             return Content(content, "application/json");

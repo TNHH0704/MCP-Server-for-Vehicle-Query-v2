@@ -1,5 +1,7 @@
 using System.Text.Json;
 
+namespace McpVersionVer2.Models.ValueObjects;
+
 public class SecurityValidationResult
 {
     public bool IsValid { get; private set; }

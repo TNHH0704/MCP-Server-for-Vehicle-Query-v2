@@ -192,7 +192,6 @@ public class ConversationController : ControllerBase
     {
         try
         {
-            // Get session from bearer token
             var authHeader = Request.Headers["Authorization"].FirstOrDefault();
             if (string.IsNullOrEmpty(authHeader) || !authHeader.StartsWith("Bearer "))
             {
@@ -202,14 +201,13 @@ public class ConversationController : ControllerBase
             var bearerToken = authHeader.Substring("Bearer ".Length).Trim();
             var sessionId = _sessionService.GetOrCreateSessionId(bearerToken);
 
-            // Validate pagination
             if (page < 1) page = 1;
             if (pageSize < 1) pageSize = 50;
             if (pageSize > 100) pageSize = 100;
 
-            // Query only user and assistant messages, newest first
             var query = _dbContext.ConversationEntries
-                .Where(e => e.SessionId == sessionId && (e.Role == "user" || e.Role == "assistant"))
+                .Where(e => e.SessionId == sessionId && 
+                    (e.Role == "user" || (e.Role == "assistant" && string.IsNullOrEmpty(e.ToolName))))
                 .OrderByDescending(e => e.Timestamp);
 
             var totalCount = await query.CountAsync();
@@ -254,7 +252,6 @@ public class ConversationController : ControllerBase
     {
         try
         {
-            // Get session from bearer token
             var authHeader = Request.Headers["Authorization"].FirstOrDefault();
             if (string.IsNullOrEmpty(authHeader) || !authHeader.StartsWith("Bearer "))
             {
@@ -264,10 +261,8 @@ public class ConversationController : ControllerBase
             var bearerToken = authHeader.Substring("Bearer ".Length).Trim();
             var sessionId = _sessionService.GetOrCreateSessionId(bearerToken);
 
-            // Clear in-memory context
             _contextService.ClearSession(sessionId);
 
-            // Hard delete from database
             var messagesDeleted = await _dbContext.ConversationEntries
                 .Where(e => e.SessionId == sessionId)
                 .ExecuteDeleteAsync();

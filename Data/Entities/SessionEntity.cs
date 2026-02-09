@@ -6,7 +6,7 @@ public class SessionEntity
     public DateTime CreatedAt { get; set; }
     public DateTime LastAccessedAt { get; set; }
     public string? BearerTokenHash { get; set; }
-    public string? UserId { get; set; } // Stable user identifier from JWT
+    public string? UserId { get; set; }
     public bool IsAnonymous { get; set; }
     public string? Metadata { get; set; }
 }

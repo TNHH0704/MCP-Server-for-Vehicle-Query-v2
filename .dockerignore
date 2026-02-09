@@ -1,0 +1,75 @@
+# Git
+.git
+.gitignore
+.gitattributes
+
+# IDE
+.vs
+.vscode
+.idea
+*.suo
+*.user
+*.sln.docstates
+
+# Build artifacts
+bin
+obj
+[Dd]ebug/
+[Rr]elease/
+*.dll
+*.pdb
+
+# Secrets and configuration
+.env
+.env.*
+appsettings.json
+appsettings.Development.json
+appsettings.local.json
+appsettings.*.json
+!appsettings.example.json
+secrets.json
+*.pfx
+*.key
+
+# Logs
+logs/
+*.log
+
+# Documentation (optional - include if needed)
+*.md
+!README.md
+Docs/
+
+# Tests
+**/tests/
+**/*Tests/
+*.Test/
+*.Tests/
+TestAuditLogging/
+test_*.fish
+test_*.sh
+
+# Docker
+docker-compose*.yml
+Dockerfile
+.dockerignore
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Node (if applicable)
+node_modules/
+npm-debug.log
+
+# Temporary files
+*.tmp
+*.temp
+*.swp
+*~
+
+# Database files
+*.db
+*.db-shm
+*.db-wal
+data/

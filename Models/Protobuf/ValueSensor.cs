@@ -1,6 +1,8 @@
 
 using ProtoBuf;
 
+namespace McpVersionVer2.Models.Protobuf;
+
 [ProtoContract]
 public class ValueSensor
 {

@@ -4,6 +4,8 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using ProtoBuf;
 
+namespace McpVersionVer2.Models.Protobuf;
+
 [ProtoContract]
 public sealed class Waypoint
 {

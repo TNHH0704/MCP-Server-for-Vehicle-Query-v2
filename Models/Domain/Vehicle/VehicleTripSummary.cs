@@ -1,3 +1,5 @@
+namespace McpVersionVer2.Models.Domain.Vehicle;
+
 public class VehicleTripSummary
 {
     public string VehicleId { get; set; } = "";

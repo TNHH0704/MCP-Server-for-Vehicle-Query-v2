@@ -29,7 +29,11 @@ public class SecurityValidationService
     {
         "system(", "eval(", "exec(", "cmd", "powershell", "<script",
         "javascript:", "select ", "insert ", "update ", "delete ",
-        "drop ", "create ", "alter ", "union ", "--", "/*", "*/"
+        "drop ", "create ", "alter ", "union ", "--", "/*", "*/",
+        " or ", " and ", " where ", " into ", " having ",
+        "'--", "';--", "' or '", "' and '", "'or'", "'and'",
+        "' or 1", "'or1", "1=1", "1 = 1", "<svg", "onerror=",
+        "onload=", "<img", "<iframe", "xss", "cookie", "document.cookie"
     };
 
     private static readonly string[] SanitizationPatterns = new[]
@@ -88,7 +92,7 @@ public class SecurityValidationService
     }
 
     /// <summary>
-    /// Main validation pipeline with AI-powered guardrails and fallback to rule-based validation
+    /// Main validation pipeline: Rule-based validation first, then optional AI enhancement
     /// </summary>
     public async Task<SecurityValidationResult> ValidateQueryAsync(string query, string toolDomain, string? userId = null)
     {
@@ -99,6 +103,7 @@ public class SecurityValidationService
 
         var lowerQuery = query.ToLowerInvariant();
 
+        // Step 1: Basic security pattern check
         var securityCheck = ValidateSecurity(query);
         if (!securityCheck.isValid)
         {
@@ -109,6 +114,14 @@ public class SecurityValidationService
             );
         }
 
+        // Step 2: Rule-based validation (domain, educational, etc.)
+        var ruleResult = ValidateQueryWithRules(query, toolDomain, userId);
+        if (!ruleResult.IsValid)
+        {
+            return ruleResult;
+        }
+
+        // Step 3: Optional AI enhancement (only if rules passed)
         try
         {
             var aiResult = await _openAIService.ValidateIntentAsync(query, toolDomain, userId);
@@ -137,10 +150,10 @@ public class SecurityValidationService
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "AI validation failed, falling back to rule-based validation");
+            _logger.LogWarning(ex, "AI validation failed, using rule-based result");
         }
 
-        return ValidateQueryWithRules(query, toolDomain, userId);
+        return ruleResult;
     }
 
     /// <summary>
@@ -159,7 +172,8 @@ public class SecurityValidationService
         // This prevents false negatives when AI validation is unavailable or returns non-standard responses.
         if (toolDomain.Equals("live_status", StringComparison.OrdinalIgnoreCase))
         {
-            if (lowerQuery.Contains("plate:") || lowerQuery.Contains("id:") || Regex.IsMatch(lowerQuery, @"\b[a-z0-9\-_]{5,}\b"))
+            // Allow if explicit identifier syntax is present (plate: or id:)
+            if (lowerQuery.Contains("plate:") || lowerQuery.Contains("id:"))
             {
                 return SecurityValidationResult.Passed();
             }
@@ -276,7 +290,9 @@ public class SecurityValidationService
 
     private (bool isValid, string? errorMessage) ValidateSecurity(string query)
     {
-        var lowerQuery = query.ToLowerInvariant();
+        // Normalize query to catch edge cases
+        var normalizedQuery = NormalizeQuery(query);
+        var lowerQuery = normalizedQuery.ToLowerInvariant();
 
         foreach (var pattern in DangerousPatterns)
         {
@@ -287,6 +303,27 @@ public class SecurityValidationService
         }
 
         return (true, null);
+    }
+
+    /// <summary>
+    /// Normalize query to handle edge cases: whitespace variations, URL encoding, Unicode normalization
+    /// </summary>
+    private string NormalizeQuery(string query)
+    {
+        if (string.IsNullOrEmpty(query))
+            return query;
+
+        // Decode URL encoding
+        var normalized = Uri.UnescapeDataString(query);
+        
+        // Normalize whitespace: tabs and newlines to spaces, multiple spaces to single
+        normalized = Regex.Replace(normalized, @"[\t\r\n]+", " ");
+        normalized = Regex.Replace(normalized, @" {2,}", " ");
+        
+        // Remove SQL comments /* */ before validation
+        normalized = Regex.Replace(normalized, @"/\*.*?\*/", "", RegexOptions.Singleline);
+        
+        return normalized.Trim();
     }
 
     private bool ContainsAllowedTopic(string lowerQuery, string toolDomain)

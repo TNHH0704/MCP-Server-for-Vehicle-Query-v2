@@ -1,4 +1,4 @@
-namespace McpVersionVer2.Models;
+namespace McpVersionVer2.Models.Domain.Vehicle;
 
 /// <summary>
 /// Paginated vehicle history result for handling large datasets
@@ -9,7 +9,7 @@ public class PaginatedVehicleHistoryResult
     public DateTime StartTime { get; set; }
     public DateTime EndTime { get; set; }
     public int TotalWaypoints { get; set; }
-    public List<object> Waypoints { get; set; } = new(); // Can be WaypointSummary or CompressedWaypointSummary
+    public List<object> Waypoints { get; set; } = new();
     public double TotalDistanceKm { get; set; }
     public string TotalRunningTimeFormatted { get; set; } = "";
     public string TotalStopTimeFormatted { get; set; } = "";

@@ -15,20 +15,20 @@ public class ConversationSummarizationService : IConversationSummarizationServic
 {
     private readonly IConversationContextService _contextService;
     private readonly IGitHubOpenAIService _aiService;
-    private readonly ConversationDbContext _dbContext;
+    private readonly IDbContextFactory<ConversationDbContext> _dbContextFactory;
     private readonly ConversationConfig _config;
     private readonly ILogger<ConversationSummarizationService> _logger;
 
     public ConversationSummarizationService(
         IConversationContextService contextService,
         IGitHubOpenAIService aiService,
-        ConversationDbContext dbContext,
+        IDbContextFactory<ConversationDbContext> dbContextFactory,
         IOptions<ConversationConfig> config,
         ILogger<ConversationSummarizationService> logger)
     {
         _contextService = contextService;
         _aiService = aiService;
-        _dbContext = dbContext;
+        _dbContextFactory = dbContextFactory;
         _config = config.Value;
         _logger = logger;
     }
@@ -37,7 +37,9 @@ public class ConversationSummarizationService : IConversationSummarizationServic
     {
         try
         {
-            var allMessagesFromDb = await _dbContext.ConversationEntries
+            using var dbContext = await _dbContextFactory.CreateDbContextAsync();
+            
+            var allMessagesFromDb = await dbContext.ConversationEntries
                 .Where(e => e.SessionId == sessionId)
                 .OrderBy(e => e.Timestamp)
                 .Select(e => new ConversationEntry
@@ -46,7 +48,7 @@ public class ConversationSummarizationService : IConversationSummarizationServic
                     SessionId = e.SessionId,
                     Timestamp = e.Timestamp,
                     Role = e.Role,
-                    ToolName = e.ToolName,
+                    ToolName = e.ToolName!,
                     Message = e.Message,
                     TokenCount = e.TokenCount
                 })
@@ -78,7 +80,7 @@ public class ConversationSummarizationService : IConversationSummarizationServic
             var totalTokens = messagesToSummarize.Sum(m => m.TokenCount);
             
             // Get or create session entity
-            var session = await _dbContext.Sessions
+            var session = await dbContext.Sessions
                 .FirstOrDefaultAsync(s => s.SessionId == sessionId);
             
             if (session == null)
@@ -91,7 +93,7 @@ public class ConversationSummarizationService : IConversationSummarizationServic
                     LastAccessedAt = DateTime.UtcNow,
                     IsAnonymous = true
                 };
-                _dbContext.Sessions.Add(session);
+                dbContext.Sessions.Add(session);
             }
             else
             {
@@ -99,7 +101,7 @@ public class ConversationSummarizationService : IConversationSummarizationServic
             }
 
             // Check existing summaries
-            var existingSummaries = await _dbContext.ConversationSummaries
+            var existingSummaries = await dbContext.ConversationSummaries
                 .Where(s => s.SessionId == sessionId)
                 .OrderBy(s => s.SummarySequence)
                 .ToListAsync();
@@ -108,7 +110,7 @@ public class ConversationSummarizationService : IConversationSummarizationServic
             if (existingSummaries.Count >= _config.MaxSummariesPerSession)
             {
                 var oldestSummary = existingSummaries.First();
-                _dbContext.ConversationSummaries.Remove(oldestSummary);
+                dbContext.ConversationSummaries.Remove(oldestSummary);
                 _logger.LogInformation("Removed oldest summary (sequence {Sequence}) for session {Session}",
                     oldestSummary.SummarySequence, sessionId);
                 
@@ -135,9 +137,9 @@ public class ConversationSummarizationService : IConversationSummarizationServic
                 CreatedAt = DateTime.UtcNow
             };
             
-            _dbContext.ConversationSummaries.Add(newSummary);
+            dbContext.ConversationSummaries.Add(newSummary);
             
-            await _dbContext.SaveChangesAsync();
+            await dbContext.SaveChangesAsync();
             
             _logger.LogInformation(
                 "Created summary for session {Session}: {MessageCount} messages, {TokenCount} tokens, sequence {Sequence}",

@@ -1,4 +1,4 @@
-namespace McpVersionVer2.Models;
+namespace McpVersionVer2.Models.Domain.Vehicle;
 
 public class VehicleHistoryResult
 {

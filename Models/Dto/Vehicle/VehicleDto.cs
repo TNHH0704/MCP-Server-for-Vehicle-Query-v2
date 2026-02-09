@@ -1,4 +1,4 @@
-namespace McpVersionVer2.Models.Dto;
+namespace McpVersionVer2.Models.Dto.Vehicle;
 
 /// <summary>
 /// DTO for presenting vehicle data to MCP tools with processed/enriched information

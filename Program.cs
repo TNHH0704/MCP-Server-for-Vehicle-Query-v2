@@ -26,13 +26,21 @@ builder.Services.AddHttpClient();
 
 builder.Services.Configure<ConversationConfig>(builder.Configuration.GetSection("ConversationContext"));
 
-// Add DbContext for conversation persistence
-builder.Services.AddDbContext<ConversationDbContext>(options =>
-    options.UseSqlite("Data Source=./data/conversation.db"));
+// Add DbContext factory for database access (singleton lifetime for use in singleton services)
+// Unified factory serves both design-time (EF migrations) and runtime needs
+builder.Services.AddSingleton<IDbContextFactory<ConversationDbContext>>(sp =>
+{
+    var connectionString = builder.Configuration.GetConnectionString("DefaultConnection") 
+        ?? throw new InvalidOperationException("DefaultConnection is not configured");
+    return new McpVersionVer2.Data.ConversationDbContextFactory(connectionString);
+});
 
-// Add DbContext factory for services that need to create scoped contexts
-builder.Services.AddDbContextFactory<ConversationDbContext>(options =>
-    options.UseSqlite("Data Source=./data/conversation.db"));
+// Add scoped DbContext for controllers (using factory to create instances)
+builder.Services.AddScoped<ConversationDbContext>(sp =>
+{
+    var factory = sp.GetRequiredService<IDbContextFactory<ConversationDbContext>>();
+    return factory.CreateDbContext();
+});
 
 builder.Services.AddSingleton<IConversationContextService, InMemoryConversationContextService>();
 // Use database-backed session storage for persistence across restarts
@@ -166,3 +174,6 @@ app.MapGet("/api/session", (ISessionStorageService sessionStorage) => {
 app.MapFallbackToFile("index.html");
 
 app.Run("http://0.0.0.0:8080");
+
+// Make Program accessible for integration tests
+public partial class Program { }

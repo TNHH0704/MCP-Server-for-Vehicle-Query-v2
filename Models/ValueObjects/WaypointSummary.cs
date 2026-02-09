@@ -1,3 +1,5 @@
+namespace McpVersionVer2.Models.ValueObjects;
+
 public class WaypointSummary
 {
     public string Timestamp { get; set; } = "";

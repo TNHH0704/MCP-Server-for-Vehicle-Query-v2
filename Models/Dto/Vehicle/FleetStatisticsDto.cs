@@ -1,4 +1,4 @@
-namespace McpVersionVer2.Models.Dto;
+namespace McpVersionVer2.Models.Dto.Vehicle;
 
 /// <summary>
 /// Fleet statistics DTO for aggregated data

@@ -1,6 +1,6 @@
 using System.Text.Json.Serialization;
 
-namespace McpVersionVer2.Models.Dto;
+namespace McpVersionVer2.Models.Dto.Vehicle;
 
 /// <summary>
 /// Root response model for vehicle status API
@@ -95,10 +95,10 @@ public class VehicleStatus
     public long StopOrIdleTime { get; set; }
 
     [JsonPropertyName("trip")]
-    public Trip? Trip { get; set; }
+    public McpVersionVer2.Models.Dto.Trip.Trip? Trip { get; set; }
 
     [JsonPropertyName("daily")]
-    public Daily? Daily { get; set; }
+    public McpVersionVer2.Models.Dto.Trip.Daily? Daily { get; set; }
 
     [JsonPropertyName("totalMileage")]
     public int TotalMileage { get; set; }

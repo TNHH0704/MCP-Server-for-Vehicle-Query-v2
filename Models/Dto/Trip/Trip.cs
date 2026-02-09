@@ -1,6 +1,6 @@
 using System.Text.Json.Serialization;
 
-namespace McpVersionVer2.Models.Dto;
+namespace McpVersionVer2.Models.Dto.Trip;
 
 /// <summary>
 /// Trip information for a vehicle

@@ -1,4 +1,4 @@
-namespace McpVersionVer2.Models.Dto;
+namespace McpVersionVer2.Models.Dto.Auth;
 
 /// <summary>
 /// Represents a cached JWT token pair with expiration information

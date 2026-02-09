@@ -116,7 +116,6 @@ public class AuthService
             };
 
             var requestJson = JsonSerializer.Serialize(loginRequest, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
-            _logger.LogDebug("Login request payload: {RequestPayload}", requestJson);
 
             var request = new HttpRequestMessage(HttpMethod.Post, endpoint);
             request.Headers.Add("accept", "application/json");
@@ -125,8 +124,7 @@ public class AuthService
             var response = await _httpClient.SendAsync(request);
 
             var responseContent = await response.Content.ReadAsStringAsync();
-            _logger.LogInformation("Login response status: {StatusCode}, content: {Content}", 
-                response.StatusCode, responseContent);
+            _logger.LogInformation("Login response status: {StatusCode}", response.StatusCode);
 
             if (!response.IsSuccessStatusCode)
             {

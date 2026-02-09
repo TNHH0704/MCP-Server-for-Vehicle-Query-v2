@@ -21,7 +21,7 @@ public class ConversationDbContext : DbContext
             entity.HasKey(e => e.SessionId);
             entity.HasIndex(e => e.LastAccessedAt);
             entity.HasIndex(e => e.BearerTokenHash)
-                  .HasFilter("BearerTokenHash IS NOT NULL");
+                  .HasFilter("[BearerTokenHash] IS NOT NULL");
         });
 
         modelBuilder.Entity<ConversationEntryEntity>(entity =>

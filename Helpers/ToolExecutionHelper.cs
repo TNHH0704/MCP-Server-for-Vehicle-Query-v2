@@ -3,10 +3,6 @@ using McpVersionVer2.Services;
 using McpVersionVer2.Security;
 
 namespace McpVersionVer2.Helpers;
-
-/// <summary>
-/// Helper for centralized tool execution with standardized error handling.
-/// </summary>
 public static class ToolExecutionHelper
 {
     /// <summary>

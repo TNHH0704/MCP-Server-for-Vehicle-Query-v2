@@ -1,4 +1,4 @@
-namespace McpVersionVer2.Models;
+namespace McpVersionVer2.Models.ValueObjects;
 public class CompressedWaypointSummary
 {
     public string Timestamp { get; set; } = "";

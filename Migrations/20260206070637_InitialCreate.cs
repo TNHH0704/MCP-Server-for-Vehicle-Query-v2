@@ -6,7 +6,7 @@ using Microsoft.EntityFrameworkCore.Migrations;
 namespace McpVersionVer2.Migrations
 {
     /// <inheritdoc />
-    public partial class InitialConversationDb : Migration
+    public partial class InitialCreate : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
@@ -15,12 +15,13 @@ namespace McpVersionVer2.Migrations
                 name: "Sessions",
                 columns: table => new
                 {
-                    SessionId = table.Column<string>(type: "TEXT", nullable: false),
-                    CreatedAt = table.Column<DateTime>(type: "TEXT", nullable: false),
-                    LastAccessedAt = table.Column<DateTime>(type: "TEXT", nullable: false),
-                    BearerTokenHash = table.Column<string>(type: "TEXT", nullable: true),
-                    IsAnonymous = table.Column<bool>(type: "INTEGER", nullable: false),
-                    Metadata = table.Column<string>(type: "TEXT", nullable: true)
+                    SessionId = table.Column<string>(type: "nvarchar(450)", nullable: false),
+                    CreatedAt = table.Column<DateTime>(type: "datetime2", nullable: false),
+                    LastAccessedAt = table.Column<DateTime>(type: "datetime2", nullable: false),
+                    BearerTokenHash = table.Column<string>(type: "nvarchar(450)", nullable: true),
+                    UserId = table.Column<string>(type: "nvarchar(max)", nullable: true),
+                    IsAnonymous = table.Column<bool>(type: "bit", nullable: false),
+                    Metadata = table.Column<string>(type: "nvarchar(max)", nullable: true)
                 },
                 constraints: table =>
                 {
@@ -31,14 +32,14 @@ namespace McpVersionVer2.Migrations
                 name: "ConversationEntries",
                 columns: table => new
                 {
-                    Id = table.Column<string>(type: "TEXT", nullable: false),
-                    SessionId = table.Column<string>(type: "TEXT", nullable: false),
-                    Timestamp = table.Column<DateTime>(type: "TEXT", nullable: false),
-                    Role = table.Column<string>(type: "TEXT", nullable: false),
-                    ToolName = table.Column<string>(type: "TEXT", nullable: true),
-                    Message = table.Column<string>(type: "TEXT", nullable: false),
-                    Metadata = table.Column<string>(type: "TEXT", nullable: true),
-                    TokenCount = table.Column<int>(type: "INTEGER", nullable: false)
+                    Id = table.Column<string>(type: "nvarchar(450)", nullable: false),
+                    SessionId = table.Column<string>(type: "nvarchar(450)", nullable: false),
+                    Timestamp = table.Column<DateTime>(type: "datetime2", nullable: false),
+                    Role = table.Column<string>(type: "nvarchar(max)", nullable: false),
+                    ToolName = table.Column<string>(type: "nvarchar(max)", nullable: true),
+                    Message = table.Column<string>(type: "nvarchar(max)", nullable: false),
+                    Metadata = table.Column<string>(type: "nvarchar(max)", nullable: true),
+                    TokenCount = table.Column<int>(type: "int", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -55,13 +56,13 @@ namespace McpVersionVer2.Migrations
                 name: "ConversationSummaries",
                 columns: table => new
                 {
-                    Id = table.Column<string>(type: "TEXT", nullable: false),
-                    SessionId = table.Column<string>(type: "TEXT", nullable: false),
-                    Summary = table.Column<string>(type: "TEXT", nullable: false),
-                    SummarySequence = table.Column<int>(type: "INTEGER", nullable: false),
-                    MessageCount = table.Column<int>(type: "INTEGER", nullable: false),
-                    TokenCount = table.Column<int>(type: "INTEGER", nullable: false),
-                    CreatedAt = table.Column<DateTime>(type: "TEXT", nullable: false)
+                    Id = table.Column<string>(type: "nvarchar(450)", nullable: false),
+                    SessionId = table.Column<string>(type: "nvarchar(450)", nullable: false),
+                    Summary = table.Column<string>(type: "nvarchar(max)", nullable: false),
+                    SummarySequence = table.Column<int>(type: "int", nullable: false),
+                    MessageCount = table.Column<int>(type: "int", nullable: false),
+                    TokenCount = table.Column<int>(type: "int", nullable: false),
+                    CreatedAt = table.Column<DateTime>(type: "datetime2", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -94,7 +95,7 @@ namespace McpVersionVer2.Migrations
                 name: "IX_Sessions_BearerTokenHash",
                 table: "Sessions",
                 column: "BearerTokenHash",
-                filter: "BearerTokenHash IS NOT NULL");
+                filter: "[BearerTokenHash] IS NOT NULL");
 
             migrationBuilder.CreateIndex(
                 name: "IX_Sessions_LastAccessedAt",
