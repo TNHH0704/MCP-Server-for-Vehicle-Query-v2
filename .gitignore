@@ -123,5 +123,4 @@ docker-compose.yml
 .github/
 wwwroot/
 data/
-Docs/
 AGENTS.md
