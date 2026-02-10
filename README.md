@@ -135,7 +135,7 @@ The system maintains conversation history with intelligent context management:
 - Daily statistics and reports
 - Token refresh
 
-See [TOOLS.md](TOOLS.md) for complete catalog.
+See [Docs/TOOLS.md](Docs/TOOLS.md) for complete catalog.
 
 ## Configuration
 
@@ -202,7 +202,7 @@ Key settings in `appsettings.json`:
 ### MCP Tools (`/sse`)
 - Server-Sent Events endpoint for MCP tool invocations
 
-See [API.md](API.md) for detailed endpoint documentation.
+See [Docs/API.md](Docs/API.md) for detailed endpoint documentation.
 
 ## Rate Limiting
 
@@ -395,7 +395,7 @@ kill -9 <PID>
 
 ## Architecture
 
-See [ARCHITECTURE.md](ARCHITECTURE.md) for detailed architecture documentation including:
+See [Docs/ARCHITECTURE.md](Docs/ARCHITECTURE.md) for detailed architecture documentation including:
 - Component diagrams
 - Sequence diagrams for key flows
 - Database schema
