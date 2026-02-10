@@ -115,8 +115,7 @@ PublishProfiles/
 
 # Application-specific (optional - uncomment if needed)
 # TEST_PROMPTS.md
-Dockerfile
-docker-compose.yml
+# Dockerfile and docker-compose.yml should be committed for infrastructure-as-code
 # README-Docker.md
 # AGENTS.md
 
@@ -124,3 +123,8 @@ docker-compose.yml
 wwwroot/
 data/
 AGENTS.md
+docker-compose.yml
+.gitignore
+init-db.sql
+Dockerfile
+.dockerignore

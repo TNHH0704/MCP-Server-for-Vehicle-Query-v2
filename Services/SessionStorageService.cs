@@ -56,7 +56,6 @@ public class InMemorySessionStorageService : ISessionStorageService
     
     private readonly TimeSpan _sessionTimeout = TimeSpan.FromHours(24);
     
-    // Reverse map for anonymous sessions (so we can list/remove them if needed)
     private readonly ConcurrentDictionary<string, bool> _anonymousSessions = new();
     
     public string GetOrCreateSessionId(string bearerToken)

@@ -13,14 +13,13 @@ ASP.NET Core 8.0 MCP (Model Context Protocol) server providing vehicle tracking,
 - **Audit Logging** - Complete audit trail of security events
 - **Rate Limiting** - Configurable rate limits per endpoint
 - **Clean Architecture** - Domain-driven design with clear separation of concerns
-- **Integration Tests** - WebApplicationFactory-based integration testing
 
 ## Quick Start
 
 ### Prerequisites
 
 - .NET 8.0 SDK
-- SQL Server (or SQLite for development)
+- SQL Server 2022+
 - OpenAI API key (for conversation features)
 
 ### Installation
@@ -53,18 +52,12 @@ cp appsettings.example.json appsettings.json
 dotnet ef database update
 ```
 
-4. Run the application
+5. Run the application
 ```bash
 dotnet run
 ```
 
 The server will start at `http://localhost:8080`
-
-### Docker Quick Start
-
-```bash
-docker-compose up -d
-```
 
 ## Authentication
 
@@ -325,8 +318,6 @@ curl -X DELETE http://localhost:8080/api/conversation/clear \
 ├── Security/            # Security validation
 │   ├── TokenHashHelper.cs
 │   └── ToolValidationException.cs
-├── tests/               # Test projects
-│   └── McpVersionVer2.IntegrationTests/  # Integration tests
 └── wwwroot/             # Frontend assets
 ```
 
@@ -345,21 +336,10 @@ dotnet watch run
 # Run the application
 dotnet run
 
-# Run integration tests
-dotnet test tests/McpVersionVer2.IntegrationTests/
-
-# Generate code coverage report
-dotnet test /p:CollectCoverage=true /p:CoverletOutputFormat=lcov
-
 # EF Core migrations
 dotnet ef migrations add MigrationName
 dotnet ef database update
 dotnet ef migrations remove
-
-# Docker build
-docker build -t mcp-server .
-docker-compose up
-docker-compose down
 ```
 
 ## Troubleshooting
@@ -377,6 +357,7 @@ kill -9 <PID>
 - Verify connection string in `appsettings.json`
 - Ensure SQL Server is running
 - Check migrations are applied: `dotnet ef database update`
+- Verify SQL_PASSWORD in .env matches your database password
 
 ### Token Expiration
 - Access tokens expire after configured time (default 1 hour)

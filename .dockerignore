@@ -22,10 +22,12 @@ obj
 # Secrets and configuration
 .env
 .env.*
-appsettings.json
+# appsettings.json - included for Docker deployment
 appsettings.Development.json
 appsettings.local.json
-appsettings.*.json
+appsettings.Production.json
+appsettings.Staging.json
+!appsettings.json
 !appsettings.example.json
 secrets.json
 *.pfx
