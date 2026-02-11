@@ -7,8 +7,8 @@ ASP.NET Core 8.0 MCP (Model Context Protocol) server providing vehicle tracking,
 - **JWT Authentication** - Secure token-based authentication with automatic refresh
 - **Vehicle Tracking** - Real-time status, GPS history, and trip analytics
 - **Conversation Context** - AI-powered conversation management with automatic summarization
-- **MCP Tools** - 13+ vehicle management tools accessible via Model Context Protocol
-- **Fleet Analytics** - Statistics, daily summaries, and comprehensive reporting
+- **MCP Tools** - 9 vehicle management tools accessible via Model Context Protocol
+- **Fleet Analytics** - Fleet statistics, vehicle compliance tracking, and daily status monitoring
 - **Security Guardrails** - AI-powered query validation and threat detection
 - **Audit Logging** - Complete audit trail of security events
 - **Rate Limiting** - Configurable rate limits per endpoint
@@ -121,11 +121,12 @@ The system maintains conversation history with intelligent context management:
 
 ### MCP Tools
 
-13 specialized tools for vehicle management accessible via `/sse` endpoint:
-- Vehicle registry queries (by plate, ID, group)
+9 specialized tools for vehicle management accessible via `/sse` endpoint:
+- Vehicle registry queries (by plate, ID, group, type)
+- Fleet statistics and compliance tracking
 - Real-time status monitoring
+- Current day statistics (mileage, runtime, max speed)
 - GPS history and trip analytics
-- Daily statistics and reports
 - Token refresh
 
 See [Docs/TOOLS.md](Docs/TOOLS.md) for complete catalog.
@@ -273,7 +274,7 @@ curl -X DELETE http://localhost:8080/api/conversation/clear \
 │   ├── Conversation/    # Context management
 │   ├── Vehicle/         # Vehicle data services
 │   └── Mappers/         # DTO mapping
-├── Tools/               # MCP tool implementations (13+ tools)
+├── Tools/               # MCP tool implementations (9 tools across 4 files)
 ├── Data/                # EF Core persistence layer
 │   ├── Entities/        # Database entities (EF Core)
 │   │   ├── ConversationEntryEntity.cs
@@ -281,39 +282,28 @@ curl -X DELETE http://localhost:8080/api/conversation/clear \
 │   │   └── SessionEntity.cs
 │   ├── ConversationDbContext.cs
 │   └── Migrations/      # EF migrations
-├── Models/              # Organized by type and feature
-│   ├── Domain/          # Domain models (business logic)
-│   │   ├── Conversation/  # Conversation domain
-│   │   │   ├── ConversationEntry.cs
-│   │   │   └── ConversationConfig.cs
-│   │   └── Vehicle/       # Vehicle domain
-│   │       ├── VehicleHistoryResult.cs
-│   │       ├── VehicleTripSummary.cs
-│   │       └── PaginatedVehicleHistoryResult.cs
-│   ├── Dto/             # Data Transfer Objects (API contracts)
-│   │   ├── Auth/          # Authentication DTOs
-│   │   │   ├── AuthRequest.cs (LoginRequest)
-│   │   │   ├── AuthResponse.cs (LoginApiResponse, LoginResponse)
-│   │   │   └── TokenResponse.cs (CachedTokenPair, TokenResponse)
-│   │   ├── Vehicle/       # Vehicle DTOs
-│   │   │   ├── Vehicle.cs (ApiResponse, VehicleResponse)
-│   │   │   ├── VehicleDto.cs
-│   │   │   ├── VehicleStatus.cs (VehicleStatusResponse, VehicleStatus)
-│   │   │   ├── FleetStatisticsDto.cs
-│   │   │   ├── RealTimeVehicleStatusDto.cs
-│   │   │   └── ... (10 total vehicle DTOs)
-│   │   └── Trip/          # Trip/Daily DTOs
-│   │       ├── Trip.cs
-│   │       └── Daily.cs
-│   ├── Protobuf/        # Binary serialization models
-│   │   ├── Waypoint.cs    # GPS data with ProtoBuf attributes
-│   │   └── ValueSensor.cs
-│   ├── Requests/        # API request models
-│   │   └── ChatRequest.cs
-│   └── ValueObjects/    # Immutable value objects
-│       ├── SecurityValidationResult.cs
-│       ├── WaypointSummary.cs
-│       └── CompressedWaypointSummary.cs
+├── Models/              # Data models (DTOs, domain models, value objects)
+│   ├── ChatRequest.cs
+│   ├── ConversationConfig.cs
+│   ├── ConversationEntry.cs
+│   ├── PaginatedVehicleHistoryResult.cs
+│   ├── SecurityValidationResult.cs
+│   ├── VehicleHistoryResult.cs
+│   ├── VehicleTripSummary.cs
+│   ├── Waypoint.cs         # GPS data with ProtoBuf attributes
+│   ├── WaypointSummary.cs
+│   ├── CompressedWaypointSummary.cs
+│   ├── ValueSensor.cs
+│   └── Dto/             # Data Transfer Objects (API contracts)
+│       ├── AuthRequest.cs
+│       ├── AuthResponse.cs
+│       ├── Daily.cs
+│       ├── FleetStatisticsDto.cs
+│       ├── RealTimeVehicleStatusDto.cs
+│       ├── Trip.cs
+│       ├── Vehicle.cs
+│       ├── VehicleDto.cs
+│       └── ... (additional vehicle/status DTOs)
 ├── Helpers/             # Utility classes
 ├── Security/            # Security validation
 │   ├── TokenHashHelper.cs

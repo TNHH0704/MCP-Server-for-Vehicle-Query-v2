@@ -4,11 +4,11 @@ Complete catalog of MCP (Model Context Protocol) tools for vehicle fleet managem
 
 ## Overview
 
-The MCP server provides 13 specialized tools organized into 4 domains:
-- **Auth Domain** - Token management
-- **Vehicle Registry Domain** - Vehicle information and fleet statistics
-- **Live Status Domain** - Real-time vehicle monitoring
-- **History Domain** - GPS tracking and trip analytics
+The MCP server provides 9 specialized tools organized into 4 domains:
+- **Auth Domain** - Token management (1 tool)
+- **Vehicle Registry Domain** - Vehicle information and fleet statistics (3 tools: GetVehicleInfo, GetFleetStatistics, GetVehicleCompliance)
+- **Live Status Domain** - Real-time vehicle monitoring (3 tools: GetVehicleLiveStatus, GetDailyStatistics, GetVehicleDailyStatus)
+- **History Domain** - GPS tracking and trip analytics (2 tools: GetVehicleHistory, GetVehicleTripSummary)
 
 ## Authentication
 
@@ -189,19 +189,19 @@ Get aggregate statistics for the entire fleet or by group.
 
 ---
 
-### GetVehiclesWithExpiredInsurance
+### GetVehicleCompliance
 
-Get list of vehicles with expired or expiring-soon insurance.
+Get vehicles with expired or expiring-soon insurance/registration.
 
 **Domain:** `vehicle_registry`
 
 **Parameters:**
-- `daysUntilExpiry` (int, optional, default: 30) - Number of days threshold
+- `daysUntilExpiry` (int, optional, default: 30) - Number of days threshold for expiration warning
 
 **Example:**
 ```json
 {
-  "name": "GetVehiclesWithExpiredInsurance",
+  "name": "GetVehicleCompliance",
   "arguments": {
     "daysUntilExpiry": 30
   }
@@ -211,51 +211,16 @@ Get list of vehicles with expired or expiring-soon insurance.
 **Response:**
 ```json
 {
-  "vehicles": [
+  "expiringInsurance": [
     {
       "vehicleId": "VM100",
       "licensePlate": "51A-11111",
       "insuranceExpiry": "2026-03-01",
       "daysUntilExpiry": 20,
       "status": "expiring_soon"
-    },
-    {
-      "vehicleId": "VM200",
-      "licensePlate": "51A-22222",
-      "insuranceExpiry": "2026-01-15",
-      "daysUntilExpiry": -25,
-      "status": "expired"
     }
   ],
-  "count": 2
-}
-```
-
----
-
-### GetVehiclesWithExpiredRegistration
-
-Get list of vehicles with expired or expiring-soon registration.
-
-**Domain:** `vehicle_registry`
-
-**Parameters:**
-- `daysUntilExpiry` (int, optional, default: 30) - Number of days threshold
-
-**Example:**
-```json
-{
-  "name": "GetVehiclesWithExpiredRegistration",
-  "arguments": {
-    "daysUntilExpiry": 30
-  }
-}
-```
-
-**Response:**
-```json
-{
-  "vehicles": [
+  "expiringRegistration": [
     {
       "vehicleId": "VM150",
       "licensePlate": "51A-33333",
@@ -263,8 +228,7 @@ Get list of vehicles with expired or expiring-soon registration.
       "daysUntilExpiry": 19,
       "status": "expiring_soon"
     }
-  ],
-  "count": 1
+  ]
 }
 ```
 
@@ -334,61 +298,106 @@ Get real-time status for one or more vehicles.
 
 ---
 
-### GetVehicleDailyMileage
+### GetDailyStatistics
 
-Get total distance traveled by vehicle(s) for a specific date.
+Get comprehensive daily statistics for vehicles (current day only).
 
 **Domain:** `live_status`
 
 **Parameters:**
-- `vehicleIdentifier` (string, required) - License plate, vehicle ID, or "all"
-- `date` (string, required) - Date in ISO format (YYYY-MM-DD)
+- `plate` (string, optional) - License plate number. If omitted, returns stats for all vehicles.
 
 **Example:**
 ```json
 {
-  "name": "GetVehicleDailyMileage",
+  "name": "GetDailyStatistics",
   "arguments": {
-    "vehicleIdentifier": "51A-12345",
-    "date": "2026-02-08"
+    "plate": "51A-12345"
   }
 }
 ```
 
-**Response:**
+**Response (single vehicle):**
 ```json
-{
-  "vehicles": [
-    {
-      "vehicleId": "VM300",
-      "licensePlate": "51A-12345",
-      "date": "2026-02-08",
-      "totalDistance": 156.8,
-      "unit": "km"
-    }
-  ]
-}
+[
+  {
+    "Plate": "51A-12345",
+    "DisplayName": "Truck A",
+    "GpsMileage": "156.80 km",
+    "RunTime": "08:00:00",
+    "EngineOffCount": 8,
+    "VehicleStopCount": 8,
+    "OverSpeed": 12,
+    "MaxSpeed": "85.5 km/h",
+    "IdleTime": "00:45:00",
+    "StopTime": "02:00:00"
+  }
+]
 ```
+
+**Response (all vehicles):**
+```json
+[
+  {
+    "Plate": "51A-12345",
+    "DisplayName": "Truck A",
+    "GpsMileage": "156.80 km",
+    "RunTime": "08:00:00",
+    "EngineOffCount": 8,
+    "VehicleStopCount": 8,
+    "OverSpeed": 12,
+    "MaxSpeed": "85.5 km/h",
+    "IdleTime": "00:45:00",
+    "StopTime": "02:00:00"
+  },
+  {
+    "Plate": "51A-67890",
+    "DisplayName": "Van B",
+    "GpsMileage": "89.30 km",
+    "RunTime": "05:30:00",
+    "EngineOffCount": 5,
+    "VehicleStopCount": 6,
+    "OverSpeed": 3,
+    "MaxSpeed": "75.2 km/h",
+    "IdleTime": "00:20:00",
+    "StopTime": "01:10:00"
+  }
+]
+```
+
+**Field Descriptions:**
+- `GpsMileage` - Total distance traveled today (formatted with km unit)
+- `RunTime` - Total engine running time (HH:mm:ss)
+- `EngineOffCount` - Number of times engine was turned off
+- `VehicleStopCount` - Number of stops/idle events
+- `OverSpeed` - Number of overspeeding incidents
+- `MaxSpeed` - Maximum speed reached (formatted with km/h unit)
+- `IdleTime` - Total time spent idling (HH:mm:ss)
+- `StopTime` - Total time spent stopped (HH:mm:ss)
+
+**Important Notes:**
+- Returns data for **current date only**
+- All distance/speed values are pre-formatted strings with units
+- Time values are in HH:mm:ss format
+- Returns array even for single vehicle query
 
 ---
 
-### GetVehicleDailyRuntime
+### GetVehicleDailyStatus
 
-Get total engine runtime for vehicle(s) for a specific date.
+Get current day statistics for a single vehicle.
 
 **Domain:** `live_status`
 
 **Parameters:**
-- `vehicleIdentifier` (string, required) - License plate, vehicle ID, or "all"
-- `date` (string, required) - Date in ISO format (YYYY-MM-DD)
+- `vehicleId` (string, required) - Vehicle ID (e.g., "VM300")
 
 **Example:**
 ```json
 {
-  "name": "GetVehicleDailyRuntime",
+  "name": "GetVehicleDailyStatus",
   "arguments": {
-    "vehicleIdentifier": "51A-12345",
-    "date": "2026-02-08"
+    "vehicleId": "VM300"
   }
 }
 ```
@@ -396,184 +405,28 @@ Get total engine runtime for vehicle(s) for a specific date.
 **Response:**
 ```json
 {
-  "vehicles": [
-    {
-      "vehicleId": "VM300",
-      "licensePlate": "51A-12345",
-      "date": "2026-02-08",
-      "totalRuntime": 480,
-      "unit": "minutes",
-      "formatted": "8 hours 0 minutes"
-    }
-  ]
+  "plate": "51A-12345",
+  "displayName": "Truck A",
+  "gpsMileage": "156.80 km",
+  "runTime": "08:00:00",
+  "maxSpeed": "85.5 km/h",
+  "overSpeedCount": 12,
+  "engineOffCount": 8,
+  "vehicleStopCount": 8
 }
 ```
 
----
+**Field Descriptions:**
+- All numeric values are pre-formatted as strings with units
+- `runTime` is in HH:mm:ss format
+- `gpsMileage` and `maxSpeed` include units (km, km/h)
+- `engineOffCount` - number of times engine was turned off
+- `vehicleStopCount` - number of times vehicle stopped (idle)
 
-### GetVehicleDailyMaxSpeed
-
-Get maximum speed reached by vehicle(s) for a specific date.
-
-**Domain:** `live_status`
-
-**Parameters:**
-- `vehicleIdentifier` (string, required) - License plate, vehicle ID, or "all"
-- `date` (string, required) - Date in ISO format (YYYY-MM-DD)
-
-**Example:**
-```json
-{
-  "name": "GetVehicleDailyMaxSpeed",
-  "arguments": {
-    "vehicleIdentifier": "51A-12345",
-    "date": "2026-02-08"
-  }
-}
-```
-
-**Response:**
-```json
-{
-  "vehicles": [
-    {
-      "vehicleId": "VM300",
-      "licensePlate": "51A-12345",
-      "date": "2026-02-08",
-      "maxSpeed": 85.5,
-      "unit": "km/h",
-      "timestamp": "2026-02-08T14:32:00Z",
-      "location": "Highway 1A"
-    }
-  ]
-}
-```
-
----
-
-### GetVehicleDailyOverspeedCount
-
-Get count of overspeeding incidents for vehicle(s) for a specific date.
-
-**Domain:** `live_status`
-
-**Parameters:**
-- `vehicleIdentifier` (string, required) - License plate, vehicle ID, or "all"
-- `date` (string, required) - Date in ISO format (YYYY-MM-DD)
-- `speedLimit` (double, optional, default: 80.0) - Speed limit threshold in km/h
-
-**Example:**
-```json
-{
-  "name": "GetVehicleDailyOverspeedCount",
-  "arguments": {
-    "vehicleIdentifier": "51A-12345",
-    "date": "2026-02-08",
-    "speedLimit": 80.0
-  }
-}
-```
-
-**Response:**
-```json
-{
-  "vehicles": [
-    {
-      "vehicleId": "VM300",
-      "licensePlate": "51A-12345",
-      "date": "2026-02-08",
-      "overspeedCount": 12,
-      "speedLimit": 80.0,
-      "maxSpeedRecorded": 95.0
-    }
-  ]
-}
-```
-
----
-
-### GetVehicleDailyStopCount
-
-Get count of stops made by vehicle(s) for a specific date.
-
-**Domain:** `live_status`
-
-**Parameters:**
-- `vehicleIdentifier` (string, required) - License plate, vehicle ID, or "all"
-- `date` (string, required) - Date in ISO format (YYYY-MM-DD)
-- `minStopDuration` (int, optional, default: 5) - Minimum stop duration in minutes
-
-**Example:**
-```json
-{
-  "name": "GetVehicleDailyStopCount",
-  "arguments": {
-    "vehicleIdentifier": "51A-12345",
-    "date": "2026-02-08",
-    "minStopDuration": 5
-  }
-}
-```
-
-**Response:**
-```json
-{
-  "vehicles": [
-    {
-      "vehicleId": "VM300",
-      "licensePlate": "51A-12345",
-      "date": "2026-02-08",
-      "stopCount": 8,
-      "minStopDuration": 5,
-      "totalStopTime": 120,
-      "unit": "minutes"
-    }
-  ]
-}
-```
-
----
-
-### GetDailyStatusSummary
-
-Get comprehensive daily statistics for vehicle(s).
-
-**Domain:** `live_status`
-
-**Parameters:**
-- `vehicleIdentifier` (string, required) - License plate, vehicle ID, or "all"
-- `date` (string, required) - Date in ISO format (YYYY-MM-DD)
-
-**Example:**
-```json
-{
-  "name": "GetDailyStatusSummary",
-  "arguments": {
-    "vehicleIdentifier": "51A-12345",
-    "date": "2026-02-08"
-  }
-}
-```
-
-**Response:**
-```json
-{
-  "vehicles": [
-    {
-      "vehicleId": "VM300",
-      "licensePlate": "51A-12345",
-      "date": "2026-02-08",
-      "mileage": 156.8,
-      "runtime": 480,
-      "maxSpeed": 85.5,
-      "overspeedCount": 12,
-      "stopCount": 8,
-      "averageSpeed": 45.2,
-      "fuelEfficiency": "calculated based on distance and runtime"
-    }
-  ]
-}
-```
+**Important Notes:**
+- This tool returns statistics for **the current date only**
+- For historical daily statistics, use **GetVehicleHistory** with a date range or specific date
+- Daily statistics include: mileage, runtime, max speed, overspeed count, stop count, idle time
 
 ---
 
@@ -701,30 +554,20 @@ Get trip statistics and summary for a time period.
 **Response:**
 ```json
 {
-  "vehicleId": "VM300",
-  "licensePlate": "51A-12345",
-  "startTime": "2026-02-08T08:00:00Z",
-  "endTime": "2026-02-08T17:00:00Z",
-  "totalDistance": 125.8,
-  "totalDuration": 540,
-  "averageSpeed": 42.5,
-  "maxSpeed": 85.0,
-  "stopCount": 6,
-  "totalStopTime": 90,
-  "startLocation": {
-    "latitude": 10.7625,
-    "longitude": 106.6825,
-    "address": "Start Address"
-  },
-  "endLocation": {
-    "latitude": 10.7758,
-    "longitude": 106.7019,
-    "address": "End Address"
-  },
-  "routeSummary": "Trip from Start Address to End Address via Highway 1A"
+  "VehicleId": "69629e7a893abd836fce437f",
+  "StartTime": "09-02-2026 00:00:07",
+  "EndTime": "09-02-2026 23:59:51",
+  "TotalDistanceKm": 395.517,
+  "DurationHours": 24.0,
+  "AverageSpeedKmh": 15.96,
+  "MaxSpeedKmh": 69,
+  "StopCount": 33,
+  "AmountOfTimeStop": 10.69,
+  "AmountOfTimeRunning": 13.3,
+  "StartInfo": "Quốc Lộ 20, X. Đạ Huoai 2,T. Lâm Đồng",
+  "EndInfo": "X. Phước Thái,T. Đồng Nai"
 }
 ```
-
 ---
 
 ## Common Patterns

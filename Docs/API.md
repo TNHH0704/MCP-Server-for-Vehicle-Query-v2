@@ -527,34 +527,6 @@ Server-Sent Events stream with tool execution results.
 
 ---
 
-## Utility Endpoints
-
-### GET /api/session
-
-Create an anonymous session without authentication.
-
-**Authentication:** None  
-**Rate Limit:** None
-
-**Response (200):**
-```json
-{
-  "sessionId": "ses_anonymous_abc123"
-}
-```
-
-**Example:**
-```bash
-curl http://localhost:8080/api/session
-```
-
-**Notes:**
-- Used for unauthenticated access
-- Limited functionality
-- No persistence guarantees
-
----
-
 ## Rate Limiting
 
 ### Headers

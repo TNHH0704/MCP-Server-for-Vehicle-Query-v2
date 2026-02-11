@@ -49,12 +49,11 @@ flowchart TB
     
     subgraph "Data Layer"
         DB[(SQL Server Database)]
-        AuditDB[(Audit DB)]
         Cache[Memory Cache]
     end
     
     subgraph "External Services"
-        Azure[Azure OpenAI]
+        GitHubModels[GitHub Models API]
         VehicleAPI[Vehicle API]
         AuthAPI[Auth API]
     end
@@ -92,8 +91,8 @@ flowchart TB
     VHT --> VHS
     VHT --> WS
     
-    Chat --> Azure
-    CSS --> Azure
+    Chat --> GitHubModels
+    CSS --> GitHubModels
     
     VS --> VehicleAPI
     VSS --> VehicleAPI
@@ -109,8 +108,6 @@ flowchart TB
     
     CCS --> DB
     SSS --> DB
-    
-    ALS --> AuditDB
     
     WS --> Cache
     VSS --> Cache
@@ -151,11 +148,11 @@ flowchart TB
 
 ### 6. Data Layer
 - **SQL Server** - Primary database (sessions, messages, summaries)
-- **Audit DB** - SQLite audit log storage
+- **File-based Audit Log** - Security events logged to ./logs/audit.log
 - **Memory Cache** - Caching for waypoints and vehicle data
 
 ### 7. External Services
-- **Azure OpenAI** - Chat completions and summarization
+- **GitHub Models API** - Chat completions and summarization (via Azure.AI.OpenAI SDK)
 - **Vehicle API** - External vehicle data provider
 - **Auth API** - External authentication service
 
@@ -290,14 +287,14 @@ flowchart TD
     D --> E[ChatController checks context]
     E --> F[ConversationService loads recent messages]
     F --> G[Database returns message history]
-    G --> H[ChatController forwards to AzureOpenAI]
+    G --> H[ChatController forwards to GitHub Models API]
     H --> I{"Tool call
     required?"}
-    I -->|Yes| J[AzureOpenAI invokes MCP tool via /sse]
+    I -->|Yes| J[GitHub Models invokes MCP tool via /sse]
     J --> K[MCPTools performs security validation]
     K --> L[MCPTools executes tool logic]
     L --> M[MCPTools returns tool result]
-    M --> N[AzureOpenAI processes tool result]
+    M --> N[GitHub Models processes tool result]
     N --> O[AzureOpenAI generates final response]
     I -->|No| O
     O --> P[ChatController saves messages async]
@@ -405,7 +402,7 @@ flowchart TD
 2. If count exceeds threshold (default 20):
    - Load all messages from database
    - Split into "to summarize" and "to preserve" (last K)
-   - Send messages to Azure OpenAI for summarization
+   - Send messages to GitHub Models API for summarization
    - Receive concise summary text
    - Save as ConversationSummaryEntity with sequence number
    - Delete old messages from database
@@ -566,7 +563,7 @@ flowchart TD
   - Educational queries blocked
   - Off-topic queries blocked
 - **AI Guardrails** (optional):
-  - Azure OpenAI validates query intent
+  - GitHub Models API validates query intent
   - Contextual threat analysis
   - Fallback to pattern matching if AI unavailable
 
